@@ -351,35 +351,38 @@ export async function executeAIBet(ai, gameState, roundState) {
         }
     }
     
-    // Handle CALL when player can't afford it
-    if (decision.action === 'call' && callAmount > ai.money_cents) {
-        // AI decides whether to go all-in or fold based on hand strength and personality
+    // Handle CALL - check if calling would be an all-in or near all-in
+    if (decision.action === 'call') {
         const handStrength = ai.evaluateHandStrength(gameState.tableTotal);
         
-        if (ai.personality === 'cautious') {
-            // Cautious AI rarely goes all-in unless hand is very strong
-            if (handStrength > 0.8 && Math.random() < 0.3) {
-                decision.action = 'all-in';
+        // If calling requires all or most of AI's money, be more conservative
+        if (callAmount >= ai.money_cents * 0.8) {
+            // This is an all-in or near all-in situation
+            if (ai.personality === 'cautious') {
+                // Cautious AI rarely calls all-ins unless hand is very strong
+                if (handStrength > 0.85) {
+                    decision.action = callAmount >= ai.money_cents ? 'all-in' : 'call';
+                } else {
+                    // Fold instead - just finalize with current bet
+                    decision.shouldFinalize = true;
+                    return decision;
+                }
+            } else if (ai.personality === 'aggressive') {
+                // Aggressive AI calls all-ins with decent hands
+                if (handStrength > 0.5) {
+                    decision.action = callAmount >= ai.money_cents ? 'all-in' : 'call';
+                } else {
+                    decision.shouldFinalize = true;
+                    return decision;
+                }
             } else {
-                // Just finalize with current bet (fold effectively)
-                decision.shouldFinalize = true;
-                return decision;
-            }
-        } else if (ai.personality === 'aggressive') {
-            // Aggressive AI more likely to go all-in
-            if (handStrength > 0.4 || Math.random() < 0.5) {
-                decision.action = 'all-in';
-            } else {
-                decision.shouldFinalize = true;
-                return decision;
-            }
-        } else {
-            // Balanced AI makes reasonable decision
-            if (handStrength > 0.6 || Math.random() < 0.4) {
-                decision.action = 'all-in';
-            } else {
-                decision.shouldFinalize = true;
-                return decision;
+                // Balanced AI needs good hand to call all-ins
+                if (handStrength > 0.7) {
+                    decision.action = callAmount >= ai.money_cents ? 'all-in' : 'call';
+                } else {
+                    decision.shouldFinalize = true;
+                    return decision;
+                }
             }
         }
     }

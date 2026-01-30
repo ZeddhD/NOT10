@@ -139,10 +139,17 @@ export async function processBet(room, players, roundState, playerId, action, am
     
     if (action === 'finalize') {
         // FINALIZE: Lock in current bet and pass turn
-        // Player must have made at least TWO bet actions before finalizing
+        // Player must have acted at least once AND everyone else must have acted (one full round)
         const playerActions = actionCount[playerId] || 0;
-        if (playerActions < 2) {
-            return { success: false, error: 'You must bet/call at least twice before finalizing.' };
+        if (playerActions < 1) {
+            return { success: false, error: 'You must bet or call before finalizing.' };
+        }
+        
+        // Check if all active players have acted at least once (one full betting round completed)
+        const activePlayers = players.filter(p => p.status === 'active');
+        const allPlayersActed = activePlayers.every(p => (actionCount[p.id] || 0) >= 1);
+        if (!allPlayersActed) {
+            return { success: false, error: 'Cannot finalize until all players have bet at least once.' };
         }
         
         // Minimum bet is $100 unless player has less money (all-in)

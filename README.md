@@ -23,7 +23,7 @@ NOT10 is a 2-4 player card game that combines poker-style betting with strategic
 | **Card Play** | Players take turns playing one card; table total increases by card value |
 | **Bust Threshold** | Table total ≥10 eliminates the player who reached it |
 | **Pot Distribution** | **WEIGHTED**: Proportional to bet amount (big bets = big rewards if you survive) |
-| **Play Order Advantage** | **Highest bettor plays LAST** (massive strategic advantage) |
+| **Play Order Advantage** | **Highest bettor CHOOSES position** (go FIRST or LAST) |
 | **Victory Condition** | Last player with money wins the game |
 
 ---
@@ -108,37 +108,46 @@ Betting Actions:
 
 ### 3️⃣ **Playing Phase** 🃏
 
-#### 🎯 **Play Order Advantage: Highest Bettor Goes Last**
+#### 🎯 **Play Order Advantage: Highest Bettor Chooses Position**
 
-**Game-Changing Rule:** The player who bet the most during betting phase plays their card **LAST** in turn order.
+**Game-Changing Rule:** The player who bet the most during betting phase gets to **CHOOSE** their play order position - go **FIRST** or go **LAST**.
 
-**Why This Matters:**
+**Why This Choice Matters:**
 ```
 Scenario: Table total is 7, you have [2] and [3]
 
-If you play FIRST:
-- Must guess what others will play
-- High risk of busting
-- No information advantage
+If you choose to GO FIRST:
+- Apply pressure early - force others to deal with higher total
+- Show confidence (intimidation factor)
+- Best when you have LOW cards (0s, 1s)
+- Risk: Less information about what's coming
 
-If you play LAST (highest bettor):
+If you choose to GO LAST:
 - See all other players' cards first
 - Know exact table total before your turn
 - Choose [2] or [3] with perfect information
-- Massive survival advantage
+- Best when you have HIGH/RISKY cards (2s, 3s)
 ```
 
-**Strategic Implications:**
-- **With strong hand (0s, 1s)**: Bet big to secure last position
-- **With weak hand (2s, 3s)**: Bet big as BLUFF for position advantage
-- **Risk vs Reward**: Big bet = better position BUT bigger loss if you bust
+**Strategic Decision Matrix:**
+- **Strong hand (all 0s, 1s)**: Choose FIRST → Put pressure on opponents, look confident
+- **Weak hand (2s, 3s)**: Choose LAST → Use information advantage to survive
+- **Mixed hand (variety)**: Depends on table dynamics and opponents' behavior
+- **Bluff opportunity**: Bet big with weak hand, choose FIRST to fake strength
+
+**Why Choice > Always Last:**
+- Adds skill-based decision making
+- Rewards players who understand position value
+- Creates mind games ("Why did they choose first?")
+- More strategic depth than fixed position
 
 #### 🃏 **Standard Turn Order**
 The real tension begins:
 
 ```
 Base Turn Order: Clockwise from starting player
-Modified Order: Highest bettor moved to LAST position
+Highest Bettor: Prompted to choose FIRST or LAST position
+Modified Order: Adjusted based on choice
 
 On Your Turn:
   1. Select one card from your hand

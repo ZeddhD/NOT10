@@ -428,11 +428,33 @@ export function showSpectatorNotice(show) {
  * @param {number} highestBet - Highest current bet
  * @param {boolean} hasRaised - Has raised once
  */
-export function updateBettingButtons(enabled, playerMoney, highestBet, hasRaised) {
+export function updateBettingButtons(enabled, playerMoney, highestBet, hasRaised, hasBet = false) {
     const betButtons = document.querySelectorAll('.btn-bet');
     const callButton = document.getElementById('call-btn');
     const allInBtn = document.getElementById('all-in-btn');
+    const finalizeBtn = document.getElementById('finalize-btn');
     
+    // If player has less than $100, disable all buttons except ALL-IN
+    if (playerMoney < 10000) {
+        betButtons.forEach(btn => {
+            btn.disabled = true;
+        });
+        
+        if (callButton) {
+            callButton.disabled = true;
+        }
+        
+        if (finalizeBtn) {
+            finalizeBtn.disabled = true;
+        }
+        
+        if (allInBtn) {
+            allInBtn.disabled = !enabled || playerMoney <= 0;
+        }
+        return;
+    }
+    
+    // Normal betting logic
     betButtons.forEach(btn => {
         const amount = parseInt(btn.dataset.amount) * 100; // Convert to cents
         btn.disabled = !enabled || playerMoney < amount;
@@ -444,6 +466,11 @@ export function updateBettingButtons(enabled, playerMoney, highestBet, hasRaised
     
     if (allInBtn) {
         allInBtn.disabled = !enabled || playerMoney <= 0;
+    }
+    
+    if (finalizeBtn) {
+        // Disable finalize if player hasn't made at least one bet action yet
+        finalizeBtn.disabled = !enabled || !hasBet;
     }
 }
 

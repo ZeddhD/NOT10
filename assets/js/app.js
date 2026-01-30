@@ -1372,11 +1372,13 @@ function updateGameUI() {
         if (isMyTurn && appState.roundState) {
             const bets = appState.roundState.bets_json || {};
             const highestBet = Math.max(0, ...Object.values(bets));
+            const hasBet = appState.roundState.has_bet_json?.[appState.currentUser.playerId] || false;
             ui.updateBettingButtons(
                 true,
                 myPlayer.money_cents,
                 highestBet,
-                appState.roundState.has_raised_json?.[appState.currentUser.playerId] || false
+                appState.roundState.has_raised_json?.[appState.currentUser.playerId] || false,
+                hasBet
             );
         }
     } else if (appState.room.phase === 'playing') {

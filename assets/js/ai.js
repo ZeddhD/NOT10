@@ -147,19 +147,22 @@ export class AIPlayer {
             return true;
         }
         
-        // Personality-based finalize decision
+        // Personality-based finalize decision with randomized thresholds
         switch (this.personality) {
             case AI_PERSONALITIES.CAUTIOUS:
-                // Cautious AI finalizes after 1-2 bets
-                return Math.random() < 0.7;
+                // Cautious AI: 60-80% chance to finalize (more likely to finalize)
+                const cautiousThreshold = 0.6 + Math.random() * 0.2;
+                return Math.random() < cautiousThreshold;
                 
             case AI_PERSONALITIES.BALANCED:
-                // Balanced AI finalizes after 1-3 bets
-                return Math.random() < 0.5;
+                // Balanced AI: 40-60% chance to finalize
+                const balancedThreshold = 0.4 + Math.random() * 0.2;
+                return Math.random() < balancedThreshold;
                 
             case AI_PERSONALITIES.AGGRESSIVE:
-                // Aggressive AI may bet multiple times before finalizing (bluff)
-                return Math.random() < 0.4;
+                // Aggressive AI: 30-50% chance to finalize (keeps betting longer)
+                const aggressiveThreshold = 0.3 + Math.random() * 0.2;
+                return Math.random() < aggressiveThreshold;
                 
             default:
                 return true;
@@ -364,6 +367,7 @@ export async function executeAIBet(ai, gameState, roundState) {
                     decision.action = callAmount >= ai.money_cents ? 'all-in' : 'call';
                 } else {
                     // Fold instead - just finalize with current bet
+                    decision.action = 'finalize';
                     decision.shouldFinalize = true;
                     return decision;
                 }
@@ -372,6 +376,7 @@ export async function executeAIBet(ai, gameState, roundState) {
                 if (handStrength > 0.5) {
                     decision.action = callAmount >= ai.money_cents ? 'all-in' : 'call';
                 } else {
+                    decision.action = 'finalize';
                     decision.shouldFinalize = true;
                     return decision;
                 }
@@ -380,6 +385,7 @@ export async function executeAIBet(ai, gameState, roundState) {
                 if (handStrength > 0.7) {
                     decision.action = callAmount >= ai.money_cents ? 'all-in' : 'call';
                 } else {
+                    decision.action = 'finalize';
                     decision.shouldFinalize = true;
                     return decision;
                 }

@@ -589,14 +589,16 @@ async function executeAIBetTurn(aiPlayer) {
             ui.addLogEntry(`${aiPlayer.name} bet ${utils.formatMoney(decision.amount)}`);
         } else if (result.action === 'all-in') {
             ui.addLogEntry(`${aiPlayer.name} went ALL-IN ${utils.formatMoney(decision.amount)}!`, 'highlight');
+        } else if (result.action === 'finalize') {
+            ui.addLogEntry(`${aiPlayer.name} finalized bet`);
         } else {
             ui.addLogEntry(`${aiPlayer.name} called ${utils.formatMoney(result.amount)}`);
         }
         
         updateGameUI();
         
-        // AI decides whether to finalize based on strategy
-        if (decision.shouldFinalize) {
+        // AI decides whether to finalize based on strategy (only if not already finalized)
+        if (decision.shouldFinalize && decision.action !== 'finalize') {
             await utils.sleep(300);
             const finalizeResult = await game.processBet(
                 appState.room,

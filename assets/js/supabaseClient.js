@@ -65,6 +65,9 @@ export function isSupabaseReady() {
  * @returns {Object} Created room
  */
 export async function createRoom(code, hostId) {
+    // Random starting player (0-3)
+    const randomStartingPlayer = Math.floor(Math.random() * 4);
+    
     const { data, error } = await supabase
         .from('rooms')
         .insert({
@@ -72,7 +75,7 @@ export async function createRoom(code, hostId) {
             host_id: hostId,
             status: 'lobby',
             current_round: 0,
-            starting_player_index: 0,
+            starting_player_index: randomStartingPlayer,
             pot_cents: 0,
             table_total: 0,
             phase: 'lobby'

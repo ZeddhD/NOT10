@@ -439,12 +439,13 @@ async function handlePlayAI() {
     // Combine all players
     appState.players = [humanPlayer, ...appState.aiPlayers];
     
-    // Create mock room
+    // Create mock room with random starting player
+    const randomStartingPlayer = Math.floor(Math.random() * 4); // Random player 0-3
     appState.room = {
         code: 'AI-GAME',
         status: 'in_game',
         current_round: 0,
-        starting_player_index: 0,
+        starting_player_index: randomStartingPlayer,
         pot_cents: 0,
         table_total: 0,
         phase: 'betting',

@@ -66,7 +66,7 @@ export async function startNewRound(room, players, isOffline = false) {
         eliminated_player_id: null,
         bets_json: {},
         has_raised_json: {},
-        has_bet_json: {}, // Track if player has made at least one bet action
+        bet_action_count_json: {}, // Track number of bet actions per player (need 2+ to finalize)
         finalized_json: {},
         played_count: 0,
         log_json: [{
@@ -130,7 +130,7 @@ export async function processBet(room, players, roundState, playerId, action, am
     
     const bets = roundState.bets_json || {};
     const hasRaised = roundState.has_raised_json || {};
-    const hasBet = roundState.has_bet_json || {};
+    const actionCount = roundState.bet_action_count_json || {};
     const finalized = roundState.finalized_json || {};
     const currentPlayerBet = bets[playerId] || 0;
     
@@ -139,9 +139,10 @@ export async function processBet(room, players, roundState, playerId, action, am
     
     if (action === 'finalize') {
         // FINALIZE: Lock in current bet and pass turn
-        // Player must make at least one bet action before finalizing
-        if (!hasBet[playerId]) {
-            return { success: false, error: 'You must place at least one bet before finalizing.' };
+        // Player must have made at least TWO bet actions before finalizing
+        const playerActions = actionCount[playerId] || 0;
+        if (playerActions < 2) {
+            return { success: false, error: 'You must bet/call at least twice before finalizing.' };
         }
         
         // Minimum bet is $100 unless player has less money (all-in)
@@ -194,19 +195,19 @@ export async function processBet(room, players, roundState, playerId, action, am
             hasRaised[playerId] = true;
         }
         
-        // Mark that player has made a bet action
-        hasBet[playerId] = true;
+        // Increment bet action count
+        actionCount[playerId] = (actionCount[playerId] || 0) + 1;
         
         if (!isOffline) {
             await supabaseClient.updatePlayer(playerId, { money_cents: player.money_cents });
             await supabaseClient.updateRoom(room.code, { pot_cents: room.pot_cents });
-            await supabaseClient.updateRoundState(room.code, { bets_json: bets, has_raised_json: hasRaised, has_bet_json: hasBet });
+            await supabaseClient.updateRoundState(room.code, { bets_json: bets, has_raised_json: hasRaised, bet_action_count_json: actionCount });
             await supabaseClient.logAction(room.code, playerId, isRaise ? 'raise' : 'bet', { amount, newTotal: newPlayerBet });
         }
         
         roundState.bets_json = bets;
         roundState.has_raised_json = hasRaised;
-        roundState.has_bet_json = hasBet;
+        roundState.bet_action_count_json = actionCount;
         roundState.log_json.push({
             type: isRaise ? 'raise' : 'bet',
             playerId,
@@ -243,8 +244,8 @@ export async function processBet(room, players, roundState, playerId, action, am
             roundState.bets_json = bets;
         }
         
-        // Mark that player has made a bet action
-        hasBet[playerId] = true;
+        // Increment bet action count
+        actionCount[playerId] = (actionCount[playerId] || 0) + 1;
         
         roundState.log_json.push({
             type: 'call',
@@ -257,10 +258,10 @@ export async function processBet(room, players, roundState, playerId, action, am
         
         if (!isOffline) {
             await supabaseClient.logAction(room.code, playerId, 'call', { amount: callAmount });
-            await supabaseClient.updateRoundState(room.code, { has_bet_json: hasBet });
+            await supabaseClient.updateRoundState(room.code, { bet_action_count_json: actionCount });
         }
         
-        roundState.has_bet_json = hasBet;
+        roundState.bet_action_count_json = actionCount;
         
         return { success: true, action: 'call', amount: callAmount };
     } else if (action === 'all-in') {
@@ -283,19 +284,19 @@ export async function processBet(room, players, roundState, playerId, action, am
             hasRaised[playerId] = true;
         }
         
-        // Mark that player has made a bet action
-        hasBet[playerId] = true;
+        // Increment bet action count
+        actionCount[playerId] = (actionCount[playerId] || 0) + 1;
         
         if (!isOffline) {
             await supabaseClient.updatePlayer(playerId, { money_cents: 0 });
             await supabaseClient.updateRoom(room.code, { pot_cents: room.pot_cents });
-            await supabaseClient.updateRoundState(room.code, { bets_json: bets, has_raised_json: hasRaised, has_bet_json: hasBet });
+            await supabaseClient.updateRoundState(room.code, { bets_json: bets, has_raised_json: hasRaised, bet_action_count_json: actionCount });
             await supabaseClient.logAction(room.code, playerId, 'all-in', { amount: allInAmount, newTotal: newPlayerBet });
         }
         
         roundState.bets_json = bets;
         roundState.has_raised_json = hasRaised;
-        roundState.has_bet_json = hasBet;
+        roundState.bet_action_count_json = actionCount;
         roundState.log_json.push({
             type: 'all-in',
             playerId,
@@ -335,11 +336,12 @@ export function isBettingComplete(activePlayers, bets, finalized) {
  * @param {Array} activePlayers - Active players
  * @param {Object} roundState - Round state with bets
  * @param {boolean} isOffline - Is offline mode
+ * @returns {Object} Transition result with highest bettor info
  */
 export async function transitionToPlaying(room, activePlayers, roundState, isOffline = false) {
     const bets = roundState.bets_json || {};
     
-    // Find player with highest bet (they play last - strategic advantage)
+    // Find player with highest bet (they get to choose position)
     let highestBet = 0;
     let highestBettorId = null;
     
@@ -351,41 +353,111 @@ export async function transitionToPlaying(room, activePlayers, roundState, isOff
         }
     }
     
+    const highestBettor = activePlayers.find(p => p.id === highestBettorId);
+    
+    // Store highest bettor info in round state for later choice
+    if (highestBettorId && highestBet > 0) {
+        roundState.highest_bettor_id = highestBettorId;
+        roundState.highest_bet = highestBet;
+        roundState.awaiting_position_choice = true;
+    }
+    
+    if (!isOffline) {
+        await supabaseClient.updateRoom(room.code, {
+            phase: 'playing'
+        });
+        await supabaseClient.updateRoundState(room.code, { 
+            highest_bettor_id: highestBettorId,
+            highest_bet: highestBet,
+            awaiting_position_choice: true
+        });
+    }
+    
+    room.phase = 'playing';
+    
+    return {
+        success: true,
+        highestBettorId,
+        highestBet,
+        highestBettor,
+        needsPositionChoice: highestBettorId && highestBet > 0
+    };
+}
+
+/**
+ * Apply position choice and set turn order
+ * @param {Object} room - Room object
+ * @param {Array} activePlayers - Active players
+ * @param {Object} roundState - Round state
+ * @param {string} choice - 'first' or 'last'
+ * @param {boolean} isOffline - Is offline mode
+ */
+export async function applyPositionChoice(room, activePlayers, roundState, choice, isOffline = false) {
+    const highestBettorId = roundState.highest_bettor_id;
+    const highestBet = roundState.highest_bet;
+    
     // Get ordered players starting from starting_player_index
     let orderedPlayers = utils.getPlayersInTurnOrder(activePlayers, room.starting_player_index);
     
-    // If there's a highest bettor, move them to play last
-    if (highestBettorId && highestBet > 0) {
-        const highestBettorIndex = orderedPlayers.findIndex(p => p.id === highestBettorId);
-        if (highestBettorIndex !== -1 && highestBettorIndex !== orderedPlayers.length - 1) {
-            // Remove highest bettor from current position
-            const highestBettor = orderedPlayers.splice(highestBettorIndex, 1)[0];
-            // Add them to the end (plays last)
-            orderedPlayers.push(highestBettor);
-            
-            // Log this advantage
-            roundState.log_json.push({
-                type: 'play_order',
-                playerId: highestBettorId,
-                playerName: highestBettor.name,
-                message: `${highestBettor.name} bet the most (${utils.formatMoney(highestBet)}) and plays LAST`,
-                timestamp: utils.getTimestamp()
-            });
-        }
+    const highestBettor = orderedPlayers.find(p => p.id === highestBettorId);
+    const highestBettorIndex = orderedPlayers.findIndex(p => p.id === highestBettorId);
+    
+    if (choice === 'last' && highestBettorIndex !== -1 && highestBettorIndex !== orderedPlayers.length - 1) {
+        // Move highest bettor to last position
+        orderedPlayers.splice(highestBettorIndex, 1);
+        orderedPlayers.push(highestBettor);
+        
+        roundState.log_json.push({
+            type: 'play_order',
+            playerId: highestBettorId,
+            playerName: highestBettor.name,
+            message: `${highestBettor.name} bet the most (${utils.formatMoney(highestBet)}) and chose to play LAST`,
+            timestamp: utils.getTimestamp()
+        });
+    } else if (choice === 'first' && highestBettorIndex !== -1 && highestBettorIndex !== 0) {
+        // Move highest bettor to first position
+        orderedPlayers.splice(highestBettorIndex, 1);
+        orderedPlayers.unshift(highestBettor);
+        
+        roundState.log_json.push({
+            type: 'play_order',
+            playerId: highestBettorId,
+            playerName: highestBettor.name,
+            message: `${highestBettor.name} bet the most (${utils.formatMoney(highestBet)}) and chose to play FIRST`,
+            timestamp: utils.getTimestamp()
+        });
+    } else {
+        // Already in desired position or choice is 'stay'
+        roundState.log_json.push({
+            type: 'play_order',
+            playerId: highestBettorId,
+            playerName: highestBettor.name,
+            message: `${highestBettor.name} bet the most (${utils.formatMoney(highestBet)}) and stays in current position`,
+            timestamp: utils.getTimestamp()
+        });
     }
     
     const firstPlayer = orderedPlayers[0];
     
+    // Clear awaiting choice flag
+    roundState.awaiting_position_choice = false;
+    
     if (!isOffline) {
         await supabaseClient.updateRoom(room.code, {
-            phase: 'playing',
             turn_player_id: firstPlayer.id
         });
-        await supabaseClient.updateRoundState(room.code, { log_json: roundState.log_json });
+        await supabaseClient.updateRoundState(room.code, { 
+            log_json: roundState.log_json,
+            awaiting_position_choice: false
+        });
     }
     
-    room.phase = 'playing';
     room.turn_player_id = firstPlayer.id;
+    
+    return {
+        success: true,
+        firstPlayer
+    };
 }
 
 /**

@@ -447,6 +447,41 @@ export function getRandomPersonality() {
 }
 
 /**
+ * AI chooses position (first or last) when they are highest bettor
+ * @param {AIPlayer} ai - AI player
+ * @param {number} tableTotal - Current table total
+ * @returns {string} 'first' or 'last'
+ */
+export function choosePosition(ai, tableTotal) {
+    // Calculate hand strength (lower cards = stronger hand)
+    const avgCard = ai.hand.reduce((sum, card) => sum + card, 0) / ai.hand.length;
+    const maxCard = Math.max(...ai.hand);
+    const minCard = Math.min(...ai.hand);
+    
+    // Strong hand indicators: low average, low max card
+    const hasStrongHand = avgCard < 1.5 || maxCard <= 1;
+    const hasWeakHand = avgCard > 2 || minCard >= 2;
+    
+    // Personality-based decision
+    if (ai.personality === 'cautious') {
+        // Cautious: Go last unless hand is very strong
+        return hasStrongHand && Math.random() > 0.3 ? 'first' : 'last';
+    } else if (ai.personality === 'aggressive') {
+        // Aggressive: Go first to intimidate unless hand is very weak
+        return hasWeakHand && Math.random() > 0.3 ? 'last' : 'first';
+    } else {
+        // Balanced: Logical decision based on hand strength
+        if (hasStrongHand) {
+            return Math.random() > 0.4 ? 'first' : 'last'; // 60% first
+        } else if (hasWeakHand) {
+            return Math.random() > 0.3 ? 'last' : 'first'; // 70% last
+        } else {
+            return Math.random() > 0.5 ? 'first' : 'last'; // 50/50
+        }
+    }
+}
+
+/**
  * Simulate AI thinking message
  * @param {AIPlayer} ai - AI player
  * @param {string} phase - Current phase ('betting' or 'playing')

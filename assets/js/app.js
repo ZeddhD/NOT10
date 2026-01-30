@@ -142,6 +142,10 @@ function setupEventListeners() {
         }
     });
     
+    // Position choice buttons
+    document.getElementById('choose-first-btn')?.addEventListener('click', () => handlePositionChoice('first'));
+    document.getElementById('choose-last-btn')?.addEventListener('click', () => handlePositionChoice('last'));
+    
     // Game over screen
     document.getElementById('play-again-btn')?.addEventListener('click', () => {
         window.location.hash = '#/menu';
@@ -500,6 +504,7 @@ async function startAIRound() {
         round_no: result.round,
         bets_json: {},
         has_raised_json: {},
+        bet_action_count_json: {},
         finalized_json: {},
         played_count: 0,
         log_json: []
@@ -619,9 +624,14 @@ async function executeAIBetTurn(aiPlayer) {
         // Check if betting is complete
         const activePlayers = appState.players.filter(p => p.status === 'active');
         if (game.isBettingComplete(activePlayers, appState.roundState.bets_json, appState.roundState.finalized_json)) {
-            await game.transitionToPlaying(appState.room, activePlayers, appState.roundState, true);
-            updateGameUI();
-            ui.addLogEntry('Playing phase started', 'highlight');
+            const transitionResult = await game.transitionToPlaying(appState.room, activePlayers, appState.roundState, true);
+            
+            if (transitionResult.needsPositionChoice) {
+                await handleAIPositionChoice(transitionResult);
+            } else {
+                updateGameUI();
+                ui.addLogEntry('Playing phase started', 'highlight');
+            }
         } else {
             // Next player's turn for betting
             const nextPlayer = game.getNextBettingPlayer(activePlayers, aiPlayer.seat_index, appState.roundState.finalized_json);
@@ -638,6 +648,15 @@ async function executeAIPlayTurn(aiPlayer) {
     await utils.sleep(800 + Math.random() * 1200);
     
     const cardToPlay = await ai.executeAICardPlay(aiPlayer, appState.room.table_total);
+    
+    // Show red border while AI is playing card
+    ui.renderGameTable(
+        appState.players, 
+        appState.currentUser.playerId, 
+        appState.room.turn_player_id,
+        appState.roundState?.finalized_json || {},
+        aiPlayer.id // Pass AI player ID to show playing-card indicator
+    );
     
     const result = await game.processCardPlay(
         appState.room,
@@ -675,12 +694,45 @@ async function handleAIRoundEnd(eliminatedPlayerId) {
         clearInterval(appState.aiLoopInterval);
         await utils.sleep(2000);
         ui.showGameOver(winner, appState.players);
-        return;
+    } else {
+        await utils.sleep(2000);
+        await startAIRound();
+    }
+}
+
+// Handle AI position choice
+async function handleAIPositionChoice(transitionResult) {
+    const aiPlayer = appState.aiPlayers.find(ai => ai.id === transitionResult.highestBettorId);
+    
+    if (aiPlayer) {
+        // Show AI is thinking
+        ui.addLogEntry(`${aiPlayer.name} is choosing position...`);
+        await utils.sleep(1000 + Math.random() * 1500);
+        
+        // AI makes choice based on hand
+        const choice = ai.choosePosition(aiPlayer, appState.room.table_total || 0);
+        
+        // Apply choice
+        const activePlayers = appState.players.filter(p => p.status === 'active');
+        await game.applyPositionChoice(appState.room, activePlayers, appState.roundState, choice, true);
+        
+        updateGameUI();
+        ui.addLogEntry('Playing phase started', 'highlight');
+    }
+}
+
+// Handle human player position choice
+async function handlePositionChoice(choice) {
+    const activePlayers = appState.players.filter(p => p.status === 'active');
+    
+    if (appState.mode === 'ai') {
+        await game.applyPositionChoice(appState.room, activePlayers, appState.roundState, choice, true);
+    } else {
+        await game.applyPositionChoice(appState.room, activePlayers, appState.roundState, choice, false);
     }
     
-    // Start next round
-    await utils.sleep(2000);
-    await startAIRound();
+    updateGameUI();
+    ui.addLogEntry('Playing phase started', 'highlight');
 }
 
 // ==========================================
@@ -725,9 +777,21 @@ async function handleAIRaise(amount) {
     // Check if betting is complete
     const activePlayers = appState.players.filter(p => p.status === 'active');
     if (game.isBettingComplete(activePlayers, appState.roundState.bets_json, appState.roundState.finalized_json)) {
-        await game.transitionToPlaying(appState.room, activePlayers, appState.roundState, true);
-        updateGameUI();
-        ui.addLogEntry('Playing phase started', 'highlight');
+        const transitionResult = await game.transitionToPlaying(appState.room, activePlayers, appState.roundState, true);
+        
+        if (transitionResult.needsPositionChoice) {
+            if (transitionResult.highestBettorId === appState.currentUser.playerId) {
+                // Human player gets to choose
+                ui.showPositionChoice(true, transitionResult.highestBet);
+                updateGameUI();
+            } else {
+                // AI player chooses
+                await handleAIPositionChoice(transitionResult);
+            }
+        } else {
+            updateGameUI();
+            ui.addLogEntry('Playing phase started', 'highlight');
+        }
     } else {
         // Next player's turn
         const humanPlayer = appState.players.find(p => p.id === appState.currentUser.playerId);
@@ -769,9 +833,21 @@ async function handleAIAllIn() {
     // Check if betting is complete
     const activePlayers = appState.players.filter(p => p.status === 'active');
     if (game.isBettingComplete(activePlayers, appState.roundState.bets_json, appState.roundState.finalized_json)) {
-        await game.transitionToPlaying(appState.room, activePlayers, appState.roundState, true);
-        updateGameUI();
-        ui.addLogEntry('Playing phase started', 'highlight');
+        const transitionResult = await game.transitionToPlaying(appState.room, activePlayers, appState.roundState, true);
+        
+        if (transitionResult.needsPositionChoice) {
+            if (transitionResult.highestBettorId === appState.currentUser.playerId) {
+                // Human player gets to choose
+                ui.showPositionChoice(true, transitionResult.highestBet);
+                updateGameUI();
+            } else {
+                // AI player chooses
+                await handleAIPositionChoice(transitionResult);
+            }
+        } else {
+            updateGameUI();
+            ui.addLogEntry('Playing phase started', 'highlight');
+        }
     } else {
         // Next player's turn
         const humanPlayer = appState.players.find(p => p.id === appState.currentUser.playerId);
@@ -805,9 +881,21 @@ async function handleAICall() {
     // Check if betting is complete
     const activePlayers = appState.players.filter(p => p.status === 'active');
     if (game.isBettingComplete(activePlayers, appState.roundState.bets_json, appState.roundState.finalized_json)) {
-        await game.transitionToPlaying(appState.room, activePlayers, appState.roundState, true);
-        updateGameUI();
-        ui.addLogEntry('Playing phase started', 'highlight');
+        const transitionResult = await game.transitionToPlaying(appState.room, activePlayers, appState.roundState, true);
+        
+        if (transitionResult.needsPositionChoice) {
+            if (transitionResult.highestBettorId === appState.currentUser.playerId) {
+                // Human player gets to choose
+                ui.showPositionChoice(true, transitionResult.highestBet);
+                updateGameUI();
+            } else {
+                // AI player chooses
+                await handleAIPositionChoice(transitionResult);
+            }
+        } else {
+            updateGameUI();
+            ui.addLogEntry('Playing phase started', 'highlight');
+        }
     } else {
         // Next player's turn
         const humanPlayer = appState.players.find(p => p.id === appState.currentUser.playerId);
@@ -849,9 +937,21 @@ async function handleAIFinalize() {
     // Check if betting is complete
     const activePlayers = appState.players.filter(p => p.status === 'active');
     if (game.isBettingComplete(activePlayers, appState.roundState.bets_json, appState.roundState.finalized_json)) {
-        await game.transitionToPlaying(appState.room, activePlayers, appState.roundState, true);
-        updateGameUI();
-        ui.addLogEntry('Playing phase started', 'highlight');
+        const transitionResult = await game.transitionToPlaying(appState.room, activePlayers, appState.roundState, true);
+        
+        if (transitionResult.needsPositionChoice) {
+            if (transitionResult.highestBettorId === appState.currentUser.playerId) {
+                // Human player gets to choose
+                ui.showPositionChoice(true, transitionResult.highestBet);
+                updateGameUI();
+            } else {
+                // AI player chooses
+                await handleAIPositionChoice(transitionResult);
+            }
+        } else {
+            updateGameUI();
+            ui.addLogEntry('Playing phase started', 'highlight');
+        }
     } else {
         // Next player's turn
         const humanPlayer = appState.players.find(p => p.id === appState.currentUser.playerId);
@@ -873,6 +973,15 @@ async function handleCardClick(cardValue) {
 
 async function handleAICardClick(cardValue) {
     const myPlayer = appState.players.find(p => p.id === appState.currentUser.playerId);
+    
+    // Show red border while player is playing card
+    ui.renderGameTable(
+        appState.players, 
+        appState.currentUser.playerId, 
+        appState.room.turn_player_id,
+        appState.roundState?.finalized_json || {},
+        appState.currentUser.playerId // Show playing-card indicator for human player
+    );
     
     const result = await game.processCardPlay(
         appState.room,
@@ -995,6 +1104,56 @@ async function handleMultiplayerCall() {
     } catch (error) {
         console.error('Failed to call:', error);
         ui.showToast('Failed to call');
+    }
+}
+
+async function handleMultiplayerAllIn() {
+    try {
+        const result = await game.processBet(
+            appState.room,
+            appState.players,
+            appState.roundState,
+            appState.currentUser.playerId,
+            'all-in',
+            null,
+            false
+        );
+        
+        if (!result.success) {
+            ui.showToast(result.error);
+            return;
+        }
+        
+        // State will update via subscription
+        
+    } catch (error) {
+        console.error('Failed to go all-in:', error);
+        ui.showToast('Failed to go all-in');
+    }
+}
+
+async function handleMultiplayerFinalize() {
+    try {
+        const result = await game.processBet(
+            appState.room,
+            appState.players,
+            appState.roundState,
+            appState.currentUser.playerId,
+            'finalize',
+            null,
+            false
+        );
+        
+        if (!result.success) {
+            ui.showToast(result.error);
+            return;
+        }
+        
+        // State will update via subscription
+        
+    } catch (error) {
+        console.error('Failed to finalize:', error);
+        ui.showToast('Failed to finalize');
     }
 }
 
@@ -1148,6 +1307,15 @@ async function executeBotPlayingTurn(botPlayer) {
     
     const tableTotal = appState.room.table_total || 0;
     const chosenCard = await ai.executeAICardPlay(aiInstance, tableTotal);
+    
+    // Show red border while bot is playing
+    ui.renderGameTable(
+        appState.players, 
+        appState.currentUser.playerId, 
+        appState.room.turn_player_id,
+        appState.roundState?.finalized_json || {},
+        botPlayer.id // Pass bot ID to show playing-card indicator
+    );
     
     // Submit card play through game logic
     const result = await game.processCardPlay(
@@ -1350,6 +1518,9 @@ function updateGameUI() {
         // Show hand cards during betting phase
         ui.renderHand(appState.myHand, false, null);
         
+        // Hide earnings breakdown during betting
+        ui.hideEarningsBreakdown();
+        
         ui.hideAllControls();
         ui.showBettingControls(isMyTurn, appState.roundState?.has_raised_json?.[appState.currentUser.playerId] || false);
         
@@ -1372,19 +1543,41 @@ function updateGameUI() {
         if (isMyTurn && appState.roundState) {
             const bets = appState.roundState.bets_json || {};
             const highestBet = Math.max(0, ...Object.values(bets));
-            const hasBet = appState.roundState.has_bet_json?.[appState.currentUser.playerId] || false;
+            const betActionCount = appState.roundState.bet_action_count_json?.[appState.currentUser.playerId] || 0;
             ui.updateBettingButtons(
                 true,
                 myPlayer.money_cents,
                 highestBet,
                 appState.roundState.has_raised_json?.[appState.currentUser.playerId] || false,
-                hasBet
+                betActionCount
             );
         }
     } else if (appState.room.phase === 'playing') {
-        ui.hideAllControls();
-        ui.showPlayingControls(true);
-        ui.renderHand(appState.myHand, isMyTurn, handleCardClick);
+        // Check if awaiting position choice
+        if (appState.roundState?.awaiting_position_choice && 
+            appState.roundState?.highest_bettor_id === appState.currentUser.playerId) {
+            // Human player needs to choose position
+            ui.hideAllControls();
+            ui.showPositionChoice(true, appState.roundState.highest_bet);
+            ui.renderHand(appState.myHand, false, null);
+        } else {
+            ui.hideAllControls();
+            ui.showPlayingControls(true);
+            ui.renderHand(appState.myHand, isMyTurn, handleCardClick);
+            
+            // Show potential earnings breakdown
+            if (appState.roundState && appState.roundState.bets_json) {
+                ui.showEarningsBreakdown(
+                    appState.players,
+                    appState.currentUser.playerId,
+                    appState.room.pot_cents,
+                    appState.roundState.bets_json
+                );
+            }
+        }
+    } else {
+        // Not betting or playing - hide earnings breakdown
+        ui.hideEarningsBreakdown();
     }
 }
 

@@ -127,8 +127,10 @@ export function updateRoomCode(elementId, code) {
  * @param {Array} players - Array of player objects
  * @param {string} currentPlayerId - Current player's ID
  * @param {string} turnPlayerId - ID of player whose turn it is
+ * @param {Object} finalized_json - Object mapping player IDs to finalization status
+ * @param {string} playingCardPlayerId - ID of player currently playing a card (optional)
  */
-export function renderGameTable(players, currentPlayerId, turnPlayerId, finalized_json = {}) {
+export function renderGameTable(players, currentPlayerId, turnPlayerId, finalized_json = {}, playingCardPlayerId = null) {
     for (let i = 0; i < 4; i++) {
         const panel = document.getElementById(`player-${i}`);
         if (!panel) continue;
@@ -140,9 +142,11 @@ export function renderGameTable(players, currentPlayerId, turnPlayerId, finalize
             const isTurn = player.id === turnPlayerId && player.status === 'active';
             const isSpectator = player.status === 'spectator';
             const hasFinalized = finalized_json[player.id] === true;
+            const isPlayingCard = playingCardPlayerId && player.id === playingCardPlayerId;
             
-            panel.classList.remove('eliminated', 'spectator', 'active-turn', 'finalized');
-            if (isTurn) panel.classList.add('active-turn');
+            panel.classList.remove('eliminated', 'spectator', 'active-turn', 'finalized', 'playing-card');
+            if (isPlayingCard) panel.classList.add('playing-card');
+            else if (isTurn) panel.classList.add('active-turn');
             if (isSpectator) panel.classList.add('spectator');
             if (hasFinalized) panel.classList.add('finalized');
             
@@ -159,6 +163,8 @@ export function renderGameTable(players, currentPlayerId, turnPlayerId, finalize
             if (statusEl) {
                 if (isSpectator) {
                     statusEl.textContent = '👻 Spectating';
+                } else if (isPlayingCard) {
+                    statusEl.textContent = '🎴 Playing Card...';
                 } else if (hasFinalized) {
                     statusEl.textContent = '✓ Finalized';
                 } else if (isTurn) {
@@ -261,6 +267,16 @@ export function clearPlayedCards() {
             playedCardEl.classList.remove('visible');
         }
     }
+}
+
+/**
+ * Hide all control sections
+ */
+export function hideAllControls() {
+    document.getElementById('betting-controls')?.classList.add('hidden');
+    document.getElementById('playing-controls')?.classList.add('hidden');
+    document.getElementById('spectator-notice')?.classList.add('hidden');
+    document.getElementById('position-choice-controls')?.classList.add('hidden');
 }
 
 /**
@@ -384,12 +400,14 @@ export function showPlayingControls(show) {
     const playingControls = document.getElementById('playing-controls');
     const bettingControls = document.getElementById('betting-controls');
     const spectatorNotice = document.getElementById('spectator-notice');
+    const positionChoice = document.getElementById('position-choice-controls');
     
     if (playingControls) {
         if (show) {
             playingControls.classList.remove('hidden');
             bettingControls?.classList.add('hidden');
             spectatorNotice?.classList.add('hidden');
+            positionChoice?.classList.add('hidden');
             
             const instruction = document.getElementById('playing-instruction');
             if (instruction) {
@@ -402,6 +420,34 @@ export function showPlayingControls(show) {
 }
 
 /**
+ * Show position choice controls
+ * @param {boolean} show - Show or hide
+ * @param {number} betAmount - Amount bet in cents
+ */
+export function showPositionChoice(show, betAmount = 0) {
+    const positionChoice = document.getElementById('position-choice-controls');
+    const bettingControls = document.getElementById('betting-controls');
+    const playingControls = document.getElementById('playing-controls');
+    const spectatorNotice = document.getElementById('spectator-notice');
+    
+    if (positionChoice) {
+        if (show) {
+            positionChoice.classList.remove('hidden');
+            bettingControls?.classList.add('hidden');
+            playingControls?.classList.add('hidden');
+            spectatorNotice?.classList.add('hidden');
+            
+            const message = document.getElementById('position-choice-message');
+            if (message && betAmount > 0) {
+                message.textContent = `You bet ${utils.formatMoney(betAmount)} - the highest! Choose your play order:`;
+            }
+        } else {
+            positionChoice.classList.add('hidden');
+        }
+    }
+}
+
+/**
  * Show spectator notice
  * @param {boolean} show - Show or hide
  */
@@ -409,12 +455,14 @@ export function showSpectatorNotice(show) {
     const spectatorNotice = document.getElementById('spectator-notice');
     const bettingControls = document.getElementById('betting-controls');
     const playingControls = document.getElementById('playing-controls');
+    const positionChoice = document.getElementById('position-choice-controls');
     
     if (spectatorNotice) {
         if (show) {
             spectatorNotice.classList.remove('hidden');
             bettingControls?.classList.add('hidden');
             playingControls?.classList.add('hidden');
+            positionChoice?.classList.add('hidden');
         } else {
             spectatorNotice.classList.add('hidden');
         }
@@ -427,8 +475,9 @@ export function showSpectatorNotice(show) {
  * @param {number} playerMoney - Player's money
  * @param {number} highestBet - Highest current bet
  * @param {boolean} hasRaised - Has raised once
+ * @param {number} betActionCount - Number of bet actions player has made
  */
-export function updateBettingButtons(enabled, playerMoney, highestBet, hasRaised, hasBet = false) {
+export function updateBettingButtons(enabled, playerMoney, highestBet, hasRaised, betActionCount = 0) {
     const betButtons = document.querySelectorAll('.btn-bet');
     const callButton = document.getElementById('call-btn');
     const allInBtn = document.getElementById('all-in-btn');
@@ -469,8 +518,8 @@ export function updateBettingButtons(enabled, playerMoney, highestBet, hasRaised
     }
     
     if (finalizeBtn) {
-        // Disable finalize if player hasn't made at least one bet action yet
-        finalizeBtn.disabled = !enabled || !hasBet;
+        // Disable finalize if player hasn't made at least TWO bet actions yet
+        finalizeBtn.disabled = !enabled || betActionCount < 2;
     }
 }
 
@@ -669,15 +718,6 @@ export function showHelpModal() {
 }
 
 /**
- * Hide all controls
- */
-export function hideAllControls() {
-    showBettingControls(false);
-    showPlayingControls(false);
-    showSpectatorNotice(false);
-}
-
-/**
  * Render create/lobby screen based on room and player state
  * @param {Object} room - Room object
  * @param {Array} players - Players array
@@ -707,6 +747,82 @@ export function initGameScreen() {
     updateRoundNumber(1);
     clearLog();
     hideAllControls();
+}
+
+/**
+ * Show potential earnings breakdown during playing phase
+ * @param {Array} players - All players
+ * @param {string} currentPlayerId - Current player's ID
+ * @param {number} potCents - Current pot in cents
+ * @param {Object} bets - Bets object mapping player IDs to bet amounts
+ */
+export function showEarningsBreakdown(players, currentPlayerId, potCents, bets) {
+    const container = document.getElementById('earnings-breakdown');
+    if (!container) return;
+    
+    // Only show during playing phase
+    const activePlayers = players.filter(p => p.status === 'active');
+    if (activePlayers.length <= 1) {
+        container.classList.add('hidden');
+        return;
+    }
+    
+    // Calculate potential earnings for each opponent elimination
+    const currentPlayer = players.find(p => p.id === currentPlayerId);
+    if (!currentPlayer) {
+        container.classList.add('hidden');
+        return;
+    }
+    
+    const currentPlayerBet = bets[currentPlayerId] || 0;
+    const opponents = activePlayers.filter(p => p.id !== currentPlayerId);
+    
+    container.innerHTML = '<h4>💰 Potential Earnings</h4>';
+    
+    opponents.forEach(opponent => {
+        // Calculate earnings if this opponent is eliminated
+        const survivors = activePlayers.filter(p => p.id !== opponent.id);
+        const totalSurvivorBets = survivors.reduce((sum, survivor) => {
+            return sum + (bets[survivor.id] || 0);
+        }, 0);
+        
+        let earnings;
+        if (totalSurvivorBets === 0) {
+            // Equal split if no bets
+            earnings = Math.floor(potCents / survivors.length);
+        } else {
+            // Weighted distribution
+            const proportion = currentPlayerBet / totalSurvivorBets;
+            earnings = Math.floor(potCents * proportion);
+        }
+        
+        const itemDiv = document.createElement('div');
+        itemDiv.className = 'earnings-item';
+        
+        const targetSpan = document.createElement('span');
+        targetSpan.className = 'earnings-target';
+        targetSpan.textContent = `Eliminate ${opponent.name}:`;
+        
+        const amountSpan = document.createElement('span');
+        amountSpan.className = 'earnings-amount';
+        amountSpan.textContent = utils.formatMoney(earnings);
+        
+        itemDiv.appendChild(targetSpan);
+        itemDiv.appendChild(amountSpan);
+        container.appendChild(itemDiv);
+    });
+    
+    container.classList.remove('hidden');
+}
+
+/**
+ * Hide earnings breakdown
+ */
+export function hideEarningsBreakdown() {
+    const container = document.getElementById('earnings-breakdown');
+    if (container) {
+        container.classList.add('hidden');
+    }
 }
 
 /**

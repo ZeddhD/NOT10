@@ -263,11 +263,34 @@
                                     <p>You're out of money. Watch the remaining players battle it out!</p>
                                 </div>
                             </div>
+
+                            <!-- Position Choice Controls -->
+                            <div id="position-choice-controls" class="controls-section hidden">
+                                <div class="position-choice-container">
+                                    <h3>🎯 You bet the most!</h3>
+                                    <p id="position-choice-message">Choose your play order position:</p>
+                                    <div class="position-buttons">
+                                        <button id="choose-first-btn" class="btn-primary">
+                                            <span class="btn-icon">⚡</span>
+                                            <span class="btn-text">GO FIRST</span>
+                                            <span class="btn-hint">Apply pressure early</span>
+                                        </button>
+                                        <button id="choose-last-btn" class="btn-primary">
+                                            <span class="btn-icon">🎯</span>
+                                            <span class="btn-text">GO LAST</span>
+                                            <span class="btn-hint">See all cards first</span>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                         
                         <div class="cards-column">
                             <div id="hand-cards" class="hand-cards">
                                 <!-- Dynamically populated with cards -->
+                            </div>
+                            <div id="earnings-breakdown" class="earnings-breakdown hidden">
+                                <!-- Dynamically populated with potential earnings -->
                             </div>
                         </div>
                     </div>
@@ -358,8 +381,9 @@
                         <li><strong>Example</strong>: Bet $500, others bet $100 each → You get 50%+ of pot!</li>
                         <li><strong>Big bets = BIG rewards</strong> if you survive (but big losses if you bust)</li>
                         <li><strong>Small bets = Small rewards</strong> (safe but less profit)</li>
-                        <li><strong>🎯 HIGHEST BETTOR PLAYS LAST</strong> = Massive advantage!</li>
-                        <li>Playing last means seeing all other cards before choosing yours</li>
+                        <li><strong>🎯 HIGHEST BETTOR CHOOSES POSITION</strong> = Go FIRST or LAST!</li>
+                        <li><strong>GO FIRST</strong>: Apply pressure, show strength (best with low cards)</li>
+                        <li><strong>GO LAST</strong>: See all cards first, perfect info (best with risky cards)</li>
                         <li>Eliminated player gets $0</li>
                         <li>If your money reaches $0 → Spectator</li>
                         <li>Game ends when one player has all the money</li>
@@ -367,9 +391,10 @@
                     
                     <h3>💡 Strategic Implications</h3>
                     <ul>
-                        <li><strong>Strong hand (0s, 1s)</strong>: BET BIG! Get huge pot share + play last</li>
-                        <li><strong>Weak hand (2s, 3s)</strong>: Bet $200-$300 to BLUFF for last position</li>
-                        <li><strong>Position advantage</strong>: Worth betting high just to play last</li>
+                        <li><strong>Strong hand (0s, 1s)</strong>: BET BIG! Get huge pot share + choose FIRST to intimidate</li>
+                        <li><strong>Weak hand (2s, 3s)</strong>: Bet big to choose LAST position = see all cards</li>
+                        <li><strong>Position choice</strong>: Adds skill-based decision making</li>
+                        <li><strong>Mind games</strong>: Why did they choose first? Bluff or strength?</li>
                         <li><strong>Risk/Reward</strong>: Calculate if big bet is worth potential loss</li>
                         <li><strong>Fewer survivors</strong>: Larger shares for everyone</li>
                     </ul>

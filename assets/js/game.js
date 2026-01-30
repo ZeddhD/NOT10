@@ -333,10 +333,47 @@ export function isBettingComplete(activePlayers, bets, finalized) {
  * Transition from betting to playing phase
  * @param {Object} room - Room object
  * @param {Array} activePlayers - Active players
+ * @param {Object} roundState - Round state with bets
  * @param {boolean} isOffline - Is offline mode
  */
-export async function transitionToPlaying(room, activePlayers, isOffline = false) {
-    const orderedPlayers = utils.getPlayersInTurnOrder(activePlayers, room.starting_player_index);
+export async function transitionToPlaying(room, activePlayers, roundState, isOffline = false) {
+    const bets = roundState.bets_json || {};
+    
+    // Find player with highest bet (they play last - strategic advantage)
+    let highestBet = 0;
+    let highestBettorId = null;
+    
+    for (const player of activePlayers) {
+        const playerBet = bets[player.id] || 0;
+        if (playerBet > highestBet) {
+            highestBet = playerBet;
+            highestBettorId = player.id;
+        }
+    }
+    
+    // Get ordered players starting from starting_player_index
+    let orderedPlayers = utils.getPlayersInTurnOrder(activePlayers, room.starting_player_index);
+    
+    // If there's a highest bettor, move them to play last
+    if (highestBettorId && highestBet > 0) {
+        const highestBettorIndex = orderedPlayers.findIndex(p => p.id === highestBettorId);
+        if (highestBettorIndex !== -1 && highestBettorIndex !== orderedPlayers.length - 1) {
+            // Remove highest bettor from current position
+            const highestBettor = orderedPlayers.splice(highestBettorIndex, 1)[0];
+            // Add them to the end (plays last)
+            orderedPlayers.push(highestBettor);
+            
+            // Log this advantage
+            roundState.log_json.push({
+                type: 'play_order',
+                playerId: highestBettorId,
+                playerName: highestBettor.name,
+                message: `${highestBettor.name} bet the most (${utils.formatMoney(highestBet)}) and plays LAST`,
+                timestamp: utils.getTimestamp()
+            });
+        }
+    }
+    
     const firstPlayer = orderedPlayers[0];
     
     if (!isOffline) {
@@ -344,6 +381,7 @@ export async function transitionToPlaying(room, activePlayers, isOffline = false
             phase: 'playing',
             turn_player_id: firstPlayer.id
         });
+        await supabaseClient.updateRoundState(room.code, { log_json: roundState.log_json });
     }
     
     room.phase = 'playing';
@@ -445,28 +483,61 @@ export async function processCardPlay(room, players, roundState, playerId, cardV
 export async function endRound(room, players, roundState, eliminatedPlayerId, isOffline = false) {
     const activePlayers = players.filter(p => p.status === 'active');
     const survivors = activePlayers.filter(p => p.id !== eliminatedPlayerId);
+    const bets = roundState.bets_json || {};
     
-    // Distribute pot among survivors
-    const { perPlayer, remainder } = utils.calculatePotSplit(room.pot_cents, survivors.length);
+    // WEIGHTED POT DISTRIBUTION: Proportional to bet amount
+    // Calculate total bets from survivors only
+    const totalSurvivorBets = survivors.reduce((sum, survivor) => {
+        return sum + (bets[survivor.id] || 0);
+    }, 0);
     
-    for (const survivor of survivors) {
-        survivor.money_cents += perPlayer;
+    const potDistributions = {};
+    let totalDistributed = 0;
+    
+    // Distribute pot proportionally to each survivor's bet
+    for (let i = 0; i < survivors.length; i++) {
+        const survivor = survivors[i];
+        const survivorBet = bets[survivor.id] || 0;
+        
+        // Calculate proportional share
+        let share;
+        if (totalSurvivorBets === 0) {
+            // If no one bet (edge case), split equally
+            share = Math.floor(room.pot_cents / survivors.length);
+        } else {
+            // Weighted distribution: (your_bet / total_survivor_bets) × pot
+            const proportion = survivorBet / totalSurvivorBets;
+            share = Math.floor(room.pot_cents * proportion);
+        }
+        
+        // Last survivor gets remainder to ensure full pot distribution
+        if (i === survivors.length - 1) {
+            share = room.pot_cents - totalDistributed;
+        }
+        
+        survivor.money_cents += share;
+        potDistributions[survivor.id] = share;
+        totalDistributed += share;
         
         if (!isOffline) {
             await supabaseClient.updatePlayer(survivor.id, { money_cents: survivor.money_cents });
         }
     }
     
-    // Keep remainder in pot for next round
-    const newPot = remainder;
+    // Reset pot to 0 for next round
+    const newPot = 0;
     
-    // Log round end
+    // Log round end with detailed distribution
+    const distributionDetails = survivors.map(s => 
+        `${s.name}: bet ${utils.formatMoney(bets[s.id] || 0)} → won ${utils.formatMoney(potDistributions[s.id])}`
+    ).join(', ');
+    
     roundState.log_json.push({
         type: 'round_end',
         eliminatedPlayerId,
         survivors: survivors.map(s => s.id),
-        potDistribution: perPlayer,
-        message: `Round ended. Each survivor won ${utils.formatMoney(perPlayer)}`,
+        potDistributions,
+        message: `Round ended. ${distributionDetails}`,
         timestamp: utils.getTimestamp()
     });
     

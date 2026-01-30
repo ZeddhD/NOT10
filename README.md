@@ -22,7 +22,8 @@ NOT10 is a 2-4 player card game that combines poker-style betting with strategic
 | **Betting** | Incremental add-on betting (+$100, +$200, +$500) with mandatory FINALIZE |
 | **Card Play** | Players take turns playing one card; table total increases by card value |
 | **Bust Threshold** | Table total ≥10 eliminates the player who reached it |
-| **Pot Distribution** | Split evenly among survivors; remainder carries to next round |
+| **Pot Distribution** | **WEIGHTED**: Proportional to bet amount (big bets = big rewards if you survive) |
+| **Play Order Advantage** | **Highest bettor plays LAST** (massive strategic advantage) |
 | **Victory Condition** | Last player with money wins the game |
 
 ---
@@ -106,10 +107,39 @@ Betting Actions:
 - **Forced All-In**: Players below $100 have no choice - creates desperate situations
 
 ### 3️⃣ **Playing Phase** 🃏
+
+#### 🎯 **Play Order Advantage: Highest Bettor Goes Last**
+
+**Game-Changing Rule:** The player who bet the most during betting phase plays their card **LAST** in turn order.
+
+**Why This Matters:**
+```
+Scenario: Table total is 7, you have [2] and [3]
+
+If you play FIRST:
+- Must guess what others will play
+- High risk of busting
+- No information advantage
+
+If you play LAST (highest bettor):
+- See all other players' cards first
+- Know exact table total before your turn
+- Choose [2] or [3] with perfect information
+- Massive survival advantage
+```
+
+**Strategic Implications:**
+- **With strong hand (0s, 1s)**: Bet big to secure last position
+- **With weak hand (2s, 3s)**: Bet big as BLUFF for position advantage
+- **Risk vs Reward**: Big bet = better position BUT bigger loss if you bust
+
+#### 🃏 **Standard Turn Order**
 The real tension begins:
 
 ```
-Turn Order: Clockwise from dealer
+Base Turn Order: Clockwise from starting player
+Modified Order: Highest bettor moved to LAST position
+
 On Your Turn:
   1. Select one card from your hand
   2. Card value adds to the TABLE TOTAL
@@ -131,20 +161,38 @@ Last survivor wins the pot 💰
 ```
 
 ### 4️⃣ **Round End** 🏆
-- **Survivors**: Pot split evenly among all players who didn't bust
-- **Pot Remainder**: Any cents that can't be split evenly carry to next round
-- **Eliminated Players**: Lose their bets
+
+#### 💰 **Weighted Pot Distribution**
+Survivors receive pot share **proportional to their bet**:
+
+**Formula:** `Your Share = (Your Bet ÷ Total Survivor Bets) × Pot`
+
+**Example:**
+```
+Pot: $2,000
+Player A bet: $500, survived → Gets (500/1100) × $2,000 = $909
+Player B bet: $400, survived → Gets (400/1100) × $2,000 = $727
+Player C bet: $200, survived → Gets (200/1100) × $2,000 = $364
+Player D bet: $100, BUSTED  → Gets $0
+
+Winner Analysis:
+Player A: Bet $500, won $909 = +$409 profit ✅
+Player B: Bet $400, won $727 = +$327 profit ✅
+Player C: Bet $200, won $364 = +$164 profit ✅
+Player D: Bet $100, lost $100 = -$100 loss ❌
+```
+
+**Key Insights:**
+- Big bets = Big rewards (if you survive)
+- Big bets = Big losses (if you bust)
+- Small bets = Small rewards (safe but less profit)
+- Your profit depends on: your bet, survivors' bets, and pot size
+
+#### 📊 **Other Round End Details**
+- **Eliminated Player**: Loses their entire bet
 - **Starting Player**: Rotates clockwise (randomly chosen at game start)
+- **Pot Reset**: Fully distributed, no remainder carries over
 - New round starts (if 2+ players have money)
-
-**Example Pot Split:**
-```
-Pot: $2,500
-Survivors: 3 players
-
-Each survivor gets: $833
-Remainder: $1 carries to next round
-```
 
 ### 5️⃣ **Game Over** 👑
 - Game ends when only 1 player has money remaining
@@ -155,15 +203,45 @@ Remainder: $1 carries to next round
 ## 🎯 Strategy Guide
 
 ### Betting Phase Tactics
+
+#### 💡 **Core Strategy: Weighted Distribution Changes Everything**
+
+**OLD System (Equal Split):** Always bet minimum
+**NEW System (Weighted):** Big bets = big rewards if you survive
+
+#### 🎯 **Optimal Betting Strategies**
+
+1. **Strong Hand Strategy (Multiple 0s, 1s)**
+   - **Action**: Bet aggressively ($300-$500)
+   - **Goal**: Maximize pot share when you survive
+   - **Bonus**: Get last play position advantage
+   - **Example**: With [0,0,1,1], bet $500 for huge payoff
+
+2. **Weak Hand Bluff (Multiple 2s, 3s)**
+   - **Action**: Bet $200-$300 to secure last position
+   - **Goal**: Play last = see others' cards first
+   - **Risk**: Bigger loss if you bust
+   - **When**: Table likely to go high (many players still in)
+
+3. **Safe Play (Moderate Hand)**
+   - **Action**: Bet minimum $100
+   - **Goal**: Minimize loss if you bust
+   - **Result**: Small profit if you survive
+   - **When**: Uncertain about hand strength
+
+4. **Forced All-In (<$100)**
+   - **Bluff**: Act confident even with bad hand
+   - **Fold**: Others might overbet and bust
+   - **Bonus**: If multiple survivors, you get small share
+
+#### ⚡ **Advanced Tactics**
+
 - **First Bet Matters**: You can't finalize until you bet at least once - use this wisely
 - **Incremental Building**: Bet +$100, +$100, +$200 across turns to apply gradual pressure
-- **Multiple Bets Before Finalize**: Create uncertainty by raising multiple times
-- **Early Finalize**: After one bet, finalize immediately to project confidence
-- **Late Finalize**: Bet minimally, then wait to see others' actions before finalizing
-- **CALL vs FINALIZE**: CALL matches highest bet and auto-finalizes; FINALIZE locks current bet
-- **Low Money Pressure**: Being forced to all-in with <$100 can be leveraged as a bluff
-- **With Strong Hand** (multiple 0s and 1s): Bet aggressively, finalize late to build pot
-- **With Weak Hand** (multiple 2s and 3s): Minimum bet ($100), finalize quickly to minimize loss
+- **Position Bidding**: Bet $300+ just to secure last play position (worth it with 2s and 3s)
+- **Pot Building**: With strong hand, bet high early to encourage others to match
+- **Low Money Pressure**: Being forced to all-in with <$100 creates desperate bluffing opportunities
+- **Survivor Count Math**: Fewer survivors = larger pot share per person
 
 ### Card Playing Tactics
 - **Early Game** (Total 0-3): Safe to play 2s and 3s

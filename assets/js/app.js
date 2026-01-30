@@ -619,7 +619,7 @@ async function executeAIBetTurn(aiPlayer) {
         // Check if betting is complete
         const activePlayers = appState.players.filter(p => p.status === 'active');
         if (game.isBettingComplete(activePlayers, appState.roundState.bets_json, appState.roundState.finalized_json)) {
-            await game.transitionToPlaying(appState.room, activePlayers, true);
+            await game.transitionToPlaying(appState.room, activePlayers, appState.roundState, true);
             updateGameUI();
             ui.addLogEntry('Playing phase started', 'highlight');
         } else {
@@ -725,7 +725,7 @@ async function handleAIRaise(amount) {
     // Check if betting is complete
     const activePlayers = appState.players.filter(p => p.status === 'active');
     if (game.isBettingComplete(activePlayers, appState.roundState.bets_json, appState.roundState.finalized_json)) {
-        await game.transitionToPlaying(appState.room, activePlayers, true);
+        await game.transitionToPlaying(appState.room, activePlayers, appState.roundState, true);
         updateGameUI();
         ui.addLogEntry('Playing phase started', 'highlight');
     } else {
@@ -769,7 +769,7 @@ async function handleAIAllIn() {
     // Check if betting is complete
     const activePlayers = appState.players.filter(p => p.status === 'active');
     if (game.isBettingComplete(activePlayers, appState.roundState.bets_json, appState.roundState.finalized_json)) {
-        await game.transitionToPlaying(appState.room, activePlayers, true);
+        await game.transitionToPlaying(appState.room, activePlayers, appState.roundState, true);
         updateGameUI();
         ui.addLogEntry('Playing phase started', 'highlight');
     } else {
@@ -805,7 +805,7 @@ async function handleAICall() {
     // Check if betting is complete
     const activePlayers = appState.players.filter(p => p.status === 'active');
     if (game.isBettingComplete(activePlayers, appState.roundState.bets_json, appState.roundState.finalized_json)) {
-        await game.transitionToPlaying(appState.room, activePlayers, true);
+        await game.transitionToPlaying(appState.room, activePlayers, appState.roundState, true);
         updateGameUI();
         ui.addLogEntry('Playing phase started', 'highlight');
     } else {
@@ -849,7 +849,7 @@ async function handleAIFinalize() {
     // Check if betting is complete
     const activePlayers = appState.players.filter(p => p.status === 'active');
     if (game.isBettingComplete(activePlayers, appState.roundState.bets_json, appState.roundState.finalized_json)) {
-        await game.transitionToPlaying(appState.room, activePlayers, true);
+        await game.transitionToPlaying(appState.room, activePlayers, appState.roundState, true);
         updateGameUI();
         ui.addLogEntry('Playing phase started', 'highlight');
     } else {

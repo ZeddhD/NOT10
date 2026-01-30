@@ -349,10 +349,13 @@ export async function transitionToPlaying(room, activePlayers, roundState, isOff
     const bets = roundState.bets_json || {};
     
     // Find player with highest bet (they get to choose position)
+    // Use turn order to break ties - first player in turn order with highest bet wins
+    const orderedPlayers = utils.getPlayersInTurnOrder(activePlayers, room.starting_player_index);
+    
     let highestBet = 0;
     let highestBettorId = null;
     
-    for (const player of activePlayers) {
+    for (const player of orderedPlayers) {
         const playerBet = bets[player.id] || 0;
         if (playerBet > highestBet) {
             highestBet = playerBet;

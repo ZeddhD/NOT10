@@ -476,8 +476,9 @@ export function showSpectatorNotice(show) {
  * @param {number} highestBet - Highest current bet
  * @param {boolean} hasRaised - Has raised once
  * @param {number} betActionCount - Number of bet actions player has made
+ * @param {boolean} allPlayersActed - Whether all players have acted at least once
  */
-export function updateBettingButtons(enabled, playerMoney, highestBet, hasRaised, betActionCount = 0) {
+export function updateBettingButtons(enabled, playerMoney, highestBet, hasRaised, betActionCount = 0, allPlayersActed = false) {
     const betButtons = document.querySelectorAll('.btn-bet');
     const callButton = document.getElementById('call-btn');
     const allInBtn = document.getElementById('all-in-btn');
@@ -518,8 +519,8 @@ export function updateBettingButtons(enabled, playerMoney, highestBet, hasRaised
     }
     
     if (finalizeBtn) {
-        // Disable finalize if player hasn't made at least TWO bet actions yet
-        finalizeBtn.disabled = !enabled || betActionCount < 2;
+        // Disable finalize if player hasn't acted yet OR not all players have acted (one full round)
+        finalizeBtn.disabled = !enabled || betActionCount < 1 || !allPlayersActed;
     }
 }
 

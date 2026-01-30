@@ -1544,12 +1544,19 @@ function updateGameUI() {
             const bets = appState.roundState.bets_json || {};
             const highestBet = Math.max(0, ...Object.values(bets));
             const betActionCount = appState.roundState.bet_action_count_json?.[appState.currentUser.playerId] || 0;
+            
+            // Check if all active players have acted at least once
+            const activePlayers = appState.players.filter(p => p.status === 'active');
+            const actionCounts = appState.roundState.bet_action_count_json || {};
+            const allPlayersActed = activePlayers.every(p => (actionCounts[p.id] || 0) >= 1);
+            
             ui.updateBettingButtons(
                 true,
                 myPlayer.money_cents,
                 highestBet,
                 appState.roundState.has_raised_json?.[appState.currentUser.playerId] || false,
-                betActionCount
+                betActionCount,
+                allPlayersActed
             );
         }
     } else if (appState.room.phase === 'playing') {

@@ -318,47 +318,62 @@
                     <button id="close-help-btn" class="btn-close">×</button>
                 </div>
                 <div class="modal-body">
-                    <h3>Objective</h3>
+                    <h3>🎯 Objective</h3>
                     <p>Be the last player with money. Avoid being the one to push the table total to 10 or higher.</p>
                     
-                    <h3>Setup</h3>
+                    <h3>⚙️ Setup</h3>
                     <ul>
-                        <li>2-4 players start with $1,000 each</li>
-                        <li>40-card deck: 10 cards each of values 0, 1, 2, 3</li>
-                        <li>Each round, players receive 4 cards (6 if only 2 players remain)</li>
+                        <li>2-4 players start with <strong>$1,000</strong> each</li>
+                        <li>40-card deck: 10 cards each of values <strong>0, 1, 2, 3</strong></li>
+                        <li>Cards dealt: <strong>4 cards</strong> (3-4 players) or <strong>6 cards</strong> (2 players)</li>
+                        <li>Starting player chosen randomly, then rotates clockwise</li>
                     </ul>
                     
-                    <h3>Betting Rules</h3>
+                    <h3>💰 Betting Rules</h3>
                     <ul>
-                        <li>Betting is <strong>mandatory</strong> - no checking or folding</li>
-                        <li>You must raise at least once per betting phase</li>
-                        <li>Raise amounts: $100, $200, or $500 only</li>
-                        <li>After raising once, you can raise more or call</li>
-                        <li>Betting ends when all players have called</li>
+                        <li><strong>Minimum bet: $100</strong> (or all-in if you have less)</li>
+                        <li>If you have <strong>less than $100</strong>, you MUST go all-in</li>
+                        <li><strong>Must make at least ONE bet action</strong> before you can finalize</li>
+                        <li>Bet increments: <strong>+$100, +$200, +$500</strong> only</li>
+                        <li>You can bet <strong>multiple times</strong> before finalizing</li>
+                        <li><strong>CALL</strong> matches highest bet and auto-finalizes</li>
+                        <li><strong>ALL-IN</strong> bets everything and auto-finalizes</li>
+                        <li><strong>FINALIZE</strong> locks your bet (only available after betting once)</li>
+                        <li>Round starts when <strong>ALL players finalize</strong></li>
                     </ul>
                     
-                    <h3>Playing Cards</h3>
+                    <h3>🃏 Playing Cards</h3>
                     <ul>
-                        <li>Players take turns playing one card</li>
-                        <li>Table total increases by the card's value</li>
-                        <li>If total reaches 10+ after <strong>your</strong> card, you're eliminated from the round</li>
-                        <li>Only one elimination per round</li>
+                        <li>Players take turns <strong>clockwise</strong> playing one card</li>
+                        <li>Table total <strong>increases</strong> by the card's value</li>
+                        <li>Card colors: <strong>0=White, 1=Green, 2=Blue, 3=Red</strong></li>
+                        <li>If total reaches <strong>10 or higher</strong> after YOUR card → You're <strong>ELIMINATED</strong></li>
+                        <li>Only one player eliminated per round</li>
                     </ul>
                     
-                    <h3>Winning & Losing</h3>
+                    <h3>🏆 Winning & Pot Distribution</h3>
                     <ul>
-                        <li>Eliminated player gets $0 from the pot</li>
-                        <li>Survivors split the pot equally</li>
-                        <li>If your money reaches $0, you become a spectator</li>
+                        <li><strong>Survivors split the pot evenly</strong> (all players who didn't bust)</li>
+                        <li>Any remainder cents carry to the next round</li>
+                        <li>Eliminated player loses their bet</li>
+                        <li>If your money reaches $0 → You become a <strong>spectator</strong></li>
                         <li>Game ends when one player has all the money</li>
                     </ul>
                     
-                    <h3>Strategy Tips</h3>
+                    <h3>💡 Strategy Tips</h3>
                     <ul>
-                        <li>Save low cards (0, 1) for when the total is high</li>
-                        <li>Bluff with big raises even with risky cards</li>
-                        <li>Watch opponents' betting patterns</li>
-                        <li>Calculate pot odds before making large raises</li>
+                        <li><strong>Low cards (0, 1)</strong>: Save for when table total is 7-9</li>
+                        <li><strong>Bluffing</strong>: Raise multiple times even with weak cards</li>
+                        <li><strong>Forced all-in</strong>: Players with <$100 are desperate - exploit it</li>
+                        <li><strong>First bet strategy</strong>: Bet minimum then finalize, or raise multiple times</li>
+                        <li><strong>Watch patterns</strong>: AI personalities reveal themselves through betting</li>
+                    </ul>
+                    
+                    <h3>🤖 AI Personalities</h3>
+                    <ul>
+                        <li><strong>Cautious Carl</strong>: Min bets, finalizes early (60-80%)</li>
+                        <li><strong>Balanced Betty</strong>: Moderate strategy (40-60% finalize)</li>
+                        <li><strong>Aggressive Alex</strong>: High bets, finalizes late (30-50%)</li>
                     </ul>
                 </div>
             </div>

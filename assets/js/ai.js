@@ -62,6 +62,11 @@ export class AIPlayer {
      * Cautious betting strategy
      */
     cautiousBetting(hasRaised, highestBet, myBet, handStrength) {
+        // If player has less than $100, must go all-in
+        if (this.money_cents < 10000) {
+            return { action: 'all-in', amount: null };
+        }
+        
         // Must raise at least once
         if (!hasRaised) {
             // Raise minimum amount
@@ -85,6 +90,11 @@ export class AIPlayer {
      * Balanced betting strategy
      */
     balancedBetting(hasRaised, highestBet, myBet, handStrength) {
+        // If player has less than $100, must go all-in
+        if (this.money_cents < 10000) {
+            return { action: 'all-in', amount: null };
+        }
+        
         if (!hasRaised) {
             // Raise based on hand strength
             if (handStrength > 0.7) {
@@ -109,6 +119,11 @@ export class AIPlayer {
      * Aggressive betting strategy
      */
     aggressiveBetting(hasRaised, highestBet, myBet, handStrength) {
+        // If player has less than $100, must go all-in
+        if (this.money_cents < 10000) {
+            return { action: 'all-in', amount: null };
+        }
+        
         if (!hasRaised) {
             // Always raise higher amounts
             const raiseOptions = [20000, 50000];

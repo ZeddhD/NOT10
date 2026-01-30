@@ -17,10 +17,12 @@ NOT10 is a 2-4 player card game that combines poker-style betting with strategic
 | **Deck** | 40 cards total (10 each of values: 0, 1, 2, 3) |
 | **Starting Money** | $1,000 per player |
 | **Players** | 2-4 players (human or AI) |
-| **Betting** | Incremental add-on betting (+$100, +$200, +$500) with FINALIZE button |
+| **Cards Dealt** | 4 cards (3-4 players) or 6 cards (2 players) |
+| **Minimum Bet** | $100 (or all-in if less than $100) |
+| **Betting** | Incremental add-on betting (+$100, +$200, +$500) with mandatory FINALIZE |
 | **Card Play** | Players take turns playing one card; table total increases by card value |
-| **Elimination** | If table total reaches ≥10 after your card, you're eliminated from the round |
-| **Pot Distribution** | Last surviving player wins the entire pot |
+| **Bust Threshold** | Table total ≥10 eliminates the player who reached it |
+| **Pot Distribution** | Split evenly among survivors; remainder carries to next round |
 | **Victory Condition** | Last player with money wins the game |
 
 ---
@@ -67,27 +69,41 @@ NOT10 is a 2-4 player card game that combines poker-style betting with strategic
 ### 2️⃣ **Betting Phase** 💰
 Every round begins with strategic betting using the incremental system:
 
+#### 📋 **Betting Rules**
 ```
+MANDATORY REQUIREMENTS:
+• Minimum bet: $100 (no exceptions unless going all-in)
+• Players with less than $100 MUST go all-in (no other options)
+• MUST make at least ONE bet action before finalizing
+• ALL players must finalize before playing phase begins
+
 Betting Actions:
 1. BET: Add money in increments (+$100, +$200, +$500)
-   - You can bet multiple times before finalizing
-   - Build up your bet to bluff or show confidence
+   - Add to your current bet total
+   - Can bet multiple times before finalizing
+   - Build up psychological pressure
    
 2. CALL: Match the current highest bet
+   - Adds difference to match highest bet
    - Automatically finalizes your bet
    - Cannot bet again after calling
    
 3. ALL-IN: Bet all your remaining money
+   - Forced option if you have less than $100
    - High-risk, high-reward move
+   - Automatically finalizes
    
 4. FINALIZE: Lock in your current bet and pass turn
+   - Only available AFTER you've made at least one bet action
    - Once finalized, you cannot bet again this round
    - Visual indicator: Green border + "✓ FINALIZED"
-   
-Round proceeds to Playing phase when ALL players have finalized
 ```
 
-**Strategy Tip**: You can bet multiple times before finalizing to create pressure and uncertainty. Finalize early to appear confident, or late to gather information.
+#### 💡 **Strategic Implications**
+- **First Action**: You MUST bet/call/all-in before you can finalize
+- **Multiple Bets**: Build your bet across multiple turns to bluff or gauge reactions
+- **Timing**: Finalize early to show strength, or late to gather information
+- **Forced All-In**: Players below $100 have no choice - creates desperate situations
 
 ### 3️⃣ **Playing Phase** 🃏
 The real tension begins:
@@ -115,10 +131,20 @@ Last survivor wins the pot 💰
 ```
 
 ### 4️⃣ **Round End** 🏆
-- **Last Survivor**: Wins the entire pot
-- **All Eliminated Players**: Lose their bets
-- Dealer rotates clockwise
+- **Survivors**: Pot split evenly among all players who didn't bust
+- **Pot Remainder**: Any cents that can't be split evenly carry to next round
+- **Eliminated Players**: Lose their bets
+- **Starting Player**: Rotates clockwise (randomly chosen at game start)
 - New round starts (if 2+ players have money)
+
+**Example Pot Split:**
+```
+Pot: $2,500
+Survivors: 3 players
+
+Each survivor gets: $833
+Remainder: $1 carries to next round
+```
 
 ### 5️⃣ **Game Over** 👑
 - Game ends when only 1 player has money remaining
@@ -129,13 +155,15 @@ Last survivor wins the pot 💰
 ## 🎯 Strategy Guide
 
 ### Betting Phase Tactics
-- **Incremental Betting**: Build up bets gradually to create psychological pressure
-- **Multiple Bets Before Finalize**: Appear uncertain or overly confident (bluffing)
-- **Early Finalize**: Show decisiveness and strength
-- **Late Finalize**: Gather information from opponents' bets first
-- **CALL vs FINALIZE**: CALL auto-finalizes; use FINALIZE to lock in current bet without matching
-- **With Strong Hand** (multiple 0s and 1s): Bet aggressively, finalize late to maximize pot
-- **With Weak Hand** (multiple 2s and 3s): Bet conservatively, finalize early to minimize loss
+- **First Bet Matters**: You can't finalize until you bet at least once - use this wisely
+- **Incremental Building**: Bet +$100, +$100, +$200 across turns to apply gradual pressure
+- **Multiple Bets Before Finalize**: Create uncertainty by raising multiple times
+- **Early Finalize**: After one bet, finalize immediately to project confidence
+- **Late Finalize**: Bet minimally, then wait to see others' actions before finalizing
+- **CALL vs FINALIZE**: CALL matches highest bet and auto-finalizes; FINALIZE locks current bet
+- **Low Money Pressure**: Being forced to all-in with <$100 can be leveraged as a bluff
+- **With Strong Hand** (multiple 0s and 1s): Bet aggressively, finalize late to build pot
+- **With Weak Hand** (multiple 2s and 3s): Minimum bet ($100), finalize quickly to minimize loss
 
 ### Card Playing Tactics
 - **Early Game** (Total 0-3): Safe to play 2s and 3s
@@ -144,9 +172,23 @@ Last survivor wins the pot 💰
 - **Last Resort**: Sometimes you must play a card that busts you - try to force others first!
 
 ### AI Personality Behaviors
-- **Cautious Carl**: Minimum bets, finalizes quickly (70% chance), only goes all-in with very strong hands (80%+)
-- **Balanced Betty**: Moderate strategy, balanced finalization (50% chance), reasonable all-in decisions (60%+)
-- **Aggressive Alex**: Maximum bets, bets multiple times (40% finalize chance), willing to go all-in with mediocre hands (40%+)
+- **Cautious Carl**: 
+  - Minimum bets ($100)
+  - Finalization: 60-80% chance per turn (randomized)
+  - All-in threshold: Only with 85%+ hand strength
+  - All-in forced if <$100
+  
+- **Balanced Betty**: 
+  - Moderate bets ($100-$200)
+  - Finalization: 40-60% chance per turn (randomized)
+  - All-in threshold: 70%+ hand strength
+  - Balanced risk-reward decisions
+  
+- **Aggressive Alex**: 
+  - High bets ($200-$500)
+  - Finalization: 30-50% chance per turn (randomized)
+  - All-in threshold: 50%+ hand strength
+  - Frequent bluffing and pressure plays
 
 ---
 

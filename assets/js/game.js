@@ -66,6 +66,7 @@ export async function startNewRound(room, players, isOffline = false) {
         eliminated_player_id: null,
         bets_json: {},
         has_raised_json: {},
+        has_bet_json: {}, // Track if player has made at least one bet action
         finalized_json: {},
         played_count: 0,
         log_json: [{
@@ -129,6 +130,7 @@ export async function processBet(room, players, roundState, playerId, action, am
     
     const bets = roundState.bets_json || {};
     const hasRaised = roundState.has_raised_json || {};
+    const hasBet = roundState.has_bet_json || {};
     const finalized = roundState.finalized_json || {};
     const currentPlayerBet = bets[playerId] || 0;
     
@@ -137,6 +139,16 @@ export async function processBet(room, players, roundState, playerId, action, am
     
     if (action === 'finalize') {
         // FINALIZE: Lock in current bet and pass turn
+        // Player must make at least one bet action before finalizing
+        if (!hasBet[playerId]) {
+            return { success: false, error: 'You must place at least one bet before finalizing.' };
+        }
+        
+        // Minimum bet is $100 unless player has less money (all-in)
+        if (currentPlayerBet < 10000 && player.money_cents > 0) {
+            return { success: false, error: 'Minimum bet is $100. Please bet or go all-in.' };
+        }
+        
         finalized[playerId] = true;
         
         if (!isOffline) {
@@ -182,15 +194,19 @@ export async function processBet(room, players, roundState, playerId, action, am
             hasRaised[playerId] = true;
         }
         
+        // Mark that player has made a bet action
+        hasBet[playerId] = true;
+        
         if (!isOffline) {
             await supabaseClient.updatePlayer(playerId, { money_cents: player.money_cents });
             await supabaseClient.updateRoom(room.code, { pot_cents: room.pot_cents });
-            await supabaseClient.updateRoundState(room.code, { bets_json: bets, has_raised_json: hasRaised });
+            await supabaseClient.updateRoundState(room.code, { bets_json: bets, has_raised_json: hasRaised, has_bet_json: hasBet });
             await supabaseClient.logAction(room.code, playerId, isRaise ? 'raise' : 'bet', { amount, newTotal: newPlayerBet });
         }
         
         roundState.bets_json = bets;
         roundState.has_raised_json = hasRaised;
+        roundState.has_bet_json = hasBet;
         roundState.log_json.push({
             type: isRaise ? 'raise' : 'bet',
             playerId,
@@ -227,6 +243,9 @@ export async function processBet(room, players, roundState, playerId, action, am
             roundState.bets_json = bets;
         }
         
+        // Mark that player has made a bet action
+        hasBet[playerId] = true;
+        
         roundState.log_json.push({
             type: 'call',
             playerId,
@@ -238,7 +257,10 @@ export async function processBet(room, players, roundState, playerId, action, am
         
         if (!isOffline) {
             await supabaseClient.logAction(room.code, playerId, 'call', { amount: callAmount });
+            await supabaseClient.updateRoundState(room.code, { has_bet_json: hasBet });
         }
+        
+        roundState.has_bet_json = hasBet;
         
         return { success: true, action: 'call', amount: callAmount };
     } else if (action === 'all-in') {
@@ -261,15 +283,19 @@ export async function processBet(room, players, roundState, playerId, action, am
             hasRaised[playerId] = true;
         }
         
+        // Mark that player has made a bet action
+        hasBet[playerId] = true;
+        
         if (!isOffline) {
             await supabaseClient.updatePlayer(playerId, { money_cents: 0 });
             await supabaseClient.updateRoom(room.code, { pot_cents: room.pot_cents });
-            await supabaseClient.updateRoundState(room.code, { bets_json: bets, has_raised_json: hasRaised });
+            await supabaseClient.updateRoundState(room.code, { bets_json: bets, has_raised_json: hasRaised, has_bet_json: hasBet });
             await supabaseClient.logAction(room.code, playerId, 'all-in', { amount: allInAmount, newTotal: newPlayerBet });
         }
         
         roundState.bets_json = bets;
         roundState.has_raised_json = hasRaised;
+        roundState.has_bet_json = hasBet;
         roundState.log_json.push({
             type: 'all-in',
             playerId,

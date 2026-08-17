@@ -341,27 +341,36 @@ h1, h2, h3, h4, h5, h6 {
     color: var(--color-danger);
 }
 
-/* Betting Buttons */
+/* Betting Buttons - two deliberately different visual weights. Adjusting
+   your bet (BET +$N) is a low-commitment, repeatable action, so it's
+   outlined and quiet. Committing (CALL / ALL-IN / FINALIZE) ends your
+   turn, so those stay solid and loud. Six equal-weight solid buttons in a
+   row was the "AI slop" problem - same size, same loudness, no hierarchy. */
 .btn-bet {
+    background: transparent;
+    color: var(--color-stakes);
+    border: var(--border-thick) solid var(--color-stakes);
+    flex: 1;
+    min-width: 0;
+}
+
+.btn-bet:hover:not(:disabled) {
     background: var(--color-stakes);
     color: var(--color-ink);
-    flex: 1;
-    min-width: 100px;
-    border: var(--border-thick) solid var(--color-ink);
 }
 
 .btn-call {
     background: var(--color-success);
     color: var(--color-ink);
     flex: 1;
-    min-width: 100px;
+    min-width: 0;
 }
 
 .btn-all-in {
     background: var(--color-danger);
     color: var(--color-ink);
     flex: 1;
-    min-width: 100px;
+    min-width: 0;
     font-weight: 900;
 }
 
@@ -369,7 +378,7 @@ h1, h2, h3, h4, h5, h6 {
     background: var(--color-accent);
     color: var(--color-ink);
     flex: 1;
-    min-width: 120px;
+    min-width: 0;
     font-weight: 900;
 }
 
@@ -663,16 +672,29 @@ h1, h2, h3, h4, h5, h6 {
     padding: 0;
 }
 
+/* Desktop: a fixed-height grid (header / table+sidebar / -) so the table
+   and the hand/betting sidebar both live in the viewport at once - no
+   scrolling required to reach the cards or the bet buttons. The sidebar
+   is the "empty space" beside the table; the event log lives inside it
+   rather than as a separate full-width strip competing for vertical room.
+   Mobile drops back to normal stacked flow (see media query below) since
+   there's no spare width to put a sidebar into. */
 .game-layout {
     width: 100%;
-    min-height: 100vh;
-    display: flex;
-    flex-direction: column;
+    height: 100vh;
+    display: grid;
+    grid-template-columns: 1fr min(380px, 34vw);
+    grid-template-rows: auto 1fr;
+    grid-template-areas:
+        "header  header"
+        "table   sidebar";
     background: var(--color-bg-primary);
+    overflow: hidden;
 }
 
 /* Game Header */
 .game-header {
+    grid-area: header;
     background: var(--color-bg-secondary);
     padding: var(--spacing-md) var(--spacing-xl);
     display: flex;
@@ -680,7 +702,6 @@ h1, h2, h3, h4, h5, h6 {
     align-items: center;
     border-bottom: var(--border-thick) solid var(--color-ink);
     box-shadow: var(--shadow-sm);
-    margin-bottom: var(--spacing-lg);
 }
 
 .header-left,
@@ -720,15 +741,40 @@ h1, h2, h3, h4, h5, h6 {
     font-weight: 700;
 }
 
-/* Game Table - a real circular table at every breakpoint, never a flat list */
+/* Game Table - a real circular table at every breakpoint, never a flat list.
+   Lives in its own grid cell (grid-area: table) and sizes itself to
+   whatever room that cell actually has, in either dimension, rather than
+   claiming a fixed viewport-relative size that could push the sidebar
+   below the fold. */
 .game-table {
-    flex: 1;
+    grid-area: table;
     position: relative;
-    width: min(92vw, 640px);
+    align-self: stretch;
+    justify-self: center;
+    /* Fill the grid row's actual height (a definite value, since the grid
+       container is height:100vh) and let aspect-ratio derive width from
+       that - then max-width caps it back down on wide columns, the same
+       "largest square that fits both axes" behavior as object-fit:contain,
+       so this never depends on guessing the header's pixel height. */
+    height: 100%;
+    width: auto;
+    max-width: min(100%, 640px);
     aspect-ratio: 1 / 1;
-    max-height: 78vh;
-    margin: 0 auto;
+    /* No vertical margin here on purpose - height:100% already refers to
+       the grid row's full size, so a vertical margin would push the box
+       taller than the row and overflow it. */
+    margin: 0;
     padding: 0;
+    min-height: 0;
+    min-width: 0;
+    /* How far a played card sits from the table's center - scales with
+       the table itself so cards always cluster around the total display
+       (see .played-card-display.pos-N below), never past its edge. Uses
+       vw rather than % on purpose: this variable is consumed inside a
+       transform on a *different* element (.played-card-display), and a
+       % value would resolve against that element's own tiny box, not
+       this one, once substituted there. */
+    --table-slot-offset: clamp(70px, 17vw, 105px);
 }
 
 /* The felt - gives the table a distinct identity separate from the page
@@ -882,62 +928,66 @@ h1, h2, h3, h4, h5, h6 {
     display: flex;
 }
 
-/* Table slots, roughly halfway between each seat and the center total -
-   matches the SEAT_ANGLE mapping the turn arrow uses (ui.js) */
+/* Table slots hug the four sides of the center total display - this is
+   "the middle of the table where the count is happening", so played cards
+   read as a pile forming around the running total, not four separate
+   toasts scattered around the table. --table-slot-offset (set on
+   .game-table, inherited here) scales with the table itself. */
 .played-card-display.pos-2 {
-    top: 24%;
+    top: 50%;
     left: 50%;
-    transform: translateX(-50%);
+    transform: translate(-50%, calc(-50% - var(--table-slot-offset)));
 }
 
 .played-card-display.pos-1 {
     top: 50%;
-    right: 20%;
-    transform: translateY(-50%);
+    left: 50%;
+    transform: translate(calc(-50% + var(--table-slot-offset)), -50%);
 }
 
 .played-card-display.pos-0 {
-    bottom: 24%;
+    top: 50%;
     left: 50%;
-    transform: translateX(-50%);
+    transform: translate(-50%, calc(-50% + var(--table-slot-offset)));
 }
 
 .played-card-display.pos-3 {
     top: 50%;
-    left: 20%;
-    transform: translateY(-50%);
+    left: 50%;
+    transform: translate(calc(-50% - var(--table-slot-offset)), -50%);
 }
 
-/* Deal-in: the card visibly travels inward from its seat's direction and
-   settles into its table slot, then stays put (no reverse/exit animation -
-   it's cleared, not animated away, at the next round's clearPlayedCards()). */
+/* Deal-in: the card visibly travels from its seat's direction toward the
+   center pile and settles there, then stays put (no reverse/exit
+   animation - it's cleared, not animated away, at the next round's
+   clearPlayedCards()). */
 .played-card-display.pos-2.visible { animation: deal-from-top var(--transition-impact); }
 .played-card-display.pos-1.visible { animation: deal-from-right var(--transition-impact); }
 .played-card-display.pos-0.visible { animation: deal-from-bottom var(--transition-impact); }
 .played-card-display.pos-3.visible { animation: deal-from-left var(--transition-impact); }
 
 @keyframes deal-from-top {
-    0% { transform: translate(-50%, -70px) scale(0.7) rotate(-8deg); opacity: 0; }
+    0% { transform: translate(-50%, calc(-50% - var(--table-slot-offset) - 90px)) scale(0.7) rotate(-8deg); opacity: 0; }
     60% { opacity: 1; }
-    100% { transform: translate(-50%, 0) scale(1) rotate(0deg); opacity: 1; }
+    100% { transform: translate(-50%, calc(-50% - var(--table-slot-offset))) scale(1) rotate(0deg); opacity: 1; }
 }
 
 @keyframes deal-from-bottom {
-    0% { transform: translate(-50%, 70px) scale(0.7) rotate(8deg); opacity: 0; }
+    0% { transform: translate(-50%, calc(-50% + var(--table-slot-offset) + 90px)) scale(0.7) rotate(8deg); opacity: 0; }
     60% { opacity: 1; }
-    100% { transform: translate(-50%, 0) scale(1) rotate(0deg); opacity: 1; }
+    100% { transform: translate(-50%, calc(-50% + var(--table-slot-offset))) scale(1) rotate(0deg); opacity: 1; }
 }
 
 @keyframes deal-from-right {
-    0% { transform: translate(70px, -50%) scale(0.7) rotate(8deg); opacity: 0; }
+    0% { transform: translate(calc(-50% + var(--table-slot-offset) + 90px), -50%) scale(0.7) rotate(8deg); opacity: 0; }
     60% { opacity: 1; }
-    100% { transform: translate(0, -50%) scale(1) rotate(0deg); opacity: 1; }
+    100% { transform: translate(calc(-50% + var(--table-slot-offset)), -50%) scale(1) rotate(0deg); opacity: 1; }
 }
 
 @keyframes deal-from-left {
-    0% { transform: translate(-70px, -50%) scale(0.7) rotate(-8deg); opacity: 0; }
+    0% { transform: translate(calc(-50% - var(--table-slot-offset) - 90px), -50%) scale(0.7) rotate(-8deg); opacity: 0; }
     60% { opacity: 1; }
-    100% { transform: translate(0, -50%) scale(1) rotate(0deg); opacity: 1; }
+    100% { transform: translate(calc(-50% - var(--table-slot-offset)), -50%) scale(1) rotate(0deg); opacity: 1; }
 }
 
 /* Played card color coding by value - the fixed card legend */
@@ -1108,11 +1158,20 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 /* Player Controls */
+/* The sidebar - your hand, your stats, your controls, and the log all
+   live here now, in the empty space beside the table, not stacked below
+   it. Scrolls internally as a last resort if content ever overflows, but
+   it's sized so that shouldn't happen in normal play. */
 .player-controls {
+    grid-area: sidebar;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
     background: var(--color-bg-secondary);
-    border-top: var(--border-thick) solid var(--color-ink);
-    padding: var(--spacing-lg) var(--spacing-xl);
-    box-shadow: 0 -4px 0 rgba(0, 0, 0, 0.25);
+    border-left: var(--border-thick) solid var(--color-ink);
+    padding: var(--spacing-lg);
+    box-shadow: -4px 0 0 rgba(0, 0, 0, 0.25);
+    overflow-y: auto;
 }
 
 /* Your own Money and Potential Payout - two distinct, always-visible stat
@@ -1160,21 +1219,20 @@ h1, h2, h3, h4, h5, h6 {
     color: var(--color-stakes);
 }
 
+/* Stacked vertically - the sidebar is a narrow column, not a wide strip,
+   so hand cards and betting controls sit one above the other instead of
+   fighting for horizontal space. */
 .controls-and-cards {
     display: flex;
-    flex-wrap: wrap;
-    gap: var(--spacing-xl);
-    align-items: flex-start;
-    justify-content: space-between;
+    flex-direction: column;
+    gap: var(--spacing-lg);
 }
 
 .controls-column {
-    flex: 1 1 320px;
     min-width: 0;
 }
 
 .cards-column {
-    flex: 1 1 260px;
     display: flex;
     align-items: center;
     flex-wrap: wrap;
@@ -1229,14 +1287,25 @@ h1, h2, h3, h4, h5, h6 {
     color: var(--color-success);
 }
 
-/* Betting Controls */
+/* Betting Controls - the two groups stack in the narrow sidebar, with a
+   hairline divider between "adjust" and "commit" so the grouping reads
+   even without relying on color alone. */
 .betting-buttons {
     display: flex;
+    flex-direction: column;
     gap: var(--spacing-md);
-    flex-wrap: wrap;
-    justify-content: center;
     margin-top: var(--spacing-md);
-    padding: var(--spacing-md) 0;
+}
+
+.bet-amount-group,
+.bet-commit-group {
+    display: flex;
+    gap: var(--spacing-sm);
+}
+
+.bet-commit-group {
+    padding-top: var(--spacing-md);
+    border-top: 2px solid var(--color-bg-tertiary);
 }
 
 .custom-bet-group {
@@ -1456,20 +1525,28 @@ h1, h2, h3, h4, h5, h6 {
     opacity: 1;
 }
 
-/* Event Log */
+/* Event Log - the last item in the sidebar column; grows to fill
+   whatever's left and scrolls internally, so a long log never pushes the
+   hand/betting controls above it out of view. */
 .event-log {
-    background: var(--color-bg-secondary);
-    border-top: var(--border-thick) solid var(--color-ink);
-    max-height: 200px;
-    overflow-y: auto;
+    background: var(--color-bg-tertiary);
+    border: var(--border-thick) solid var(--color-ink);
+    border-radius: var(--radius-md);
+    margin-top: var(--spacing-lg);
+    flex: 1 1 auto;
+    min-height: 90px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
 }
 
 .log-header {
-    padding: var(--spacing-md) var(--spacing-xl);
+    padding: var(--spacing-sm) var(--spacing-md);
     display: flex;
     justify-content: space-between;
     align-items: center;
-    border-bottom: 1px solid var(--color-bg-tertiary);
+    border-bottom: 2px solid var(--color-ink);
+    flex: 0 0 auto;
 }
 
 .log-header h3 {
@@ -1480,10 +1557,12 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .log-messages {
-    padding: var(--spacing-md) var(--spacing-xl);
-    font-size: 0.875rem;
+    padding: var(--spacing-sm) var(--spacing-md);
+    font-size: 0.8rem;
     font-weight: 600;
-    line-height: 1.6;
+    line-height: 1.5;
+    overflow-y: auto;
+    flex: 1 1 auto;
 }
 
 .log-entry {
@@ -1681,6 +1760,38 @@ h1, h2, h3, h4, h5, h6 {
    layout chrome around it (screen padding, header wrap, control stacking)
    adapts per breakpoint. */
 
+/* Below this width there's no room for a sidebar next to the table, so
+   drop the fixed-height desktop grid and go back to normal stacked flow
+   (the page scrolls on mobile - expected there, unlike on desktop where
+   the whole point is that it doesn't have to). */
+@media (max-width: 900px) {
+    .game-layout {
+        height: auto;
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        overflow: visible;
+    }
+
+    .game-table {
+        height: auto;
+        width: min(94vw, 520px);
+        max-width: none;
+        margin: var(--spacing-md) auto;
+    }
+
+    .player-controls {
+        border-left: none;
+        border-top: var(--border-thick) solid var(--color-ink);
+        box-shadow: 0 -4px 0 rgba(0, 0, 0, 0.25);
+        overflow-y: visible;
+    }
+
+    .event-log {
+        max-height: 220px;
+    }
+}
+
 @media (max-width: 768px) {
     .game-title {
         font-size: 3.2rem;
@@ -1701,8 +1812,7 @@ h1, h2, h3, h4, h5, h6 {
     }
 
     .game-table {
-        width: min(94vw, 520px);
-        max-height: 62vh;
+        width: min(94vw, 480px);
     }
 }
 
@@ -1737,9 +1847,8 @@ h1, h2, h3, h4, h5, h6 {
     }
 
     .game-table {
-        width: 96vw;
-        max-height: 50vh;
-        margin-bottom: var(--spacing-md);
+        width: min(96vw, 380px);
+        margin: var(--spacing-md) auto;
     }
 
     .player-controls {

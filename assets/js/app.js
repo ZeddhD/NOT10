@@ -475,10 +475,14 @@ function updateGameUI() {
             const tableHighestEl = document.getElementById('table-highest');
             const yourBetEl = document.getElementById('your-bet');
             const callAmountEl = document.getElementById('call-amount');
-            
+            const callBtn = document.getElementById('call-btn');
+
             if (tableHighestEl) tableHighestEl.textContent = `Table: ${utils.formatMoney(tableHighest)}`;
             if (yourBetEl) yourBetEl.textContent = `You: ${utils.formatMoney(yourBet)}`;
             if (callAmountEl) callAmountEl.textContent = `To Call: ${utils.formatMoney(callAmount)}`;
+            // CALL with nothing owed is really a check - say so, don't
+            // leave the button claiming an amount that isn't there.
+            if (callBtn) callBtn.textContent = callAmount > 0 ? `CALL ${utils.formatMoney(callAmount)}` : 'CHECK';
         }
         
         if (isMyTurn && appState.roundState) {

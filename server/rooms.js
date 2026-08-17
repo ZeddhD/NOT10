@@ -619,7 +619,7 @@ export class RoomManager {
             await utils.sleep(1000 + Math.random() * 1500);
             if (!room.roundState?.awaiting_position_choice) return; // resolved while we waited
 
-            const choice = ai.choosePosition(aiInstance, room.room.table_total || 0);
+            const choice = ai.choosePosition(aiInstance);
             const activePlayers = room.players.filter(p => p.status === 'active');
             game.applyPositionChoice(room.room, activePlayers, room.roundState, choice);
             room.touch();

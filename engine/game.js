@@ -104,6 +104,11 @@ export function processBet(room, players, roundState, playerId, action, amount) 
     if (!player || player.status !== 'active') {
         return { success: false, error: 'Player not active' };
     }
+    // processCardPlay has always enforced this; betting never did, so any
+    // active player could act out of turn during the betting phase.
+    if (room.turn_player_id !== playerId) {
+        return { success: false, error: 'Not your turn' };
+    }
 
     const bets = roundState.bets_json || {};
     const hasRaised = roundState.has_raised_json || {};

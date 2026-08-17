@@ -369,6 +369,13 @@ export class RoomManager {
 
         if (game.isBettingComplete(activePlayers, room.roundState.finalized_json)) {
             game.transitionToPlaying(room.room, activePlayers, room.roundState);
+            // Cards are dealt once at round start, so on the rare hand this
+            // small this can already be true the instant betting ends - no
+            // one would ever get to play a card, so _handsExhausted() after
+            // a play (see _handlePlayCard/_autoPlayCard) would never run.
+            if (!room.roundState.awaiting_position_choice && this._handsExhausted(room)) {
+                return this._endRound(room, null);
+            }
         } else {
             const actingPlayer = room.players.find(p => p.id === actingPlayerId);
             const nextPlayer = actingPlayer
@@ -391,6 +398,7 @@ export class RoomManager {
         const activePlayers = room.players.filter(p => p.status === 'active');
         game.applyPositionChoice(room.room, activePlayers, room.roundState, choice === 'first' ? 'first' : 'last');
         room.touch();
+        if (this._handsExhausted(room)) return this._endRound(room, null);
         this._broadcast(room);
     }
 
@@ -545,14 +553,15 @@ export class RoomManager {
         }
 
         // 'call' and 'all-in' already auto-finalize inside processBet - only
-        // a plain 'bet' needs this separate follow-up finalize call.
+        // a plain 'bet' needs this separate follow-up finalize call. It's
+        // expected (not logged) for this to be rejected with "not all
+        // players have bet yet" - the bot is just opportunistically trying
+        // to lock in early; _advanceBetting below runs regardless, and this
+        // bot gets another chance to finalize once its turn comes back.
         if (decision.shouldFinalize && decision.action !== 'finalize' && decision.action !== 'call' && decision.action !== 'all-in') {
             await utils.sleep(300);
             if (room.room.status !== 'in_game') return;
-            const finalizeResult = game.processBet(room.room, room.players, room.roundState, player.id, 'finalize', null);
-            if (!finalizeResult.success) {
-                console.error(`Auto-finalize failed for ${player.id}:`, finalizeResult.error);
-            }
+            game.processBet(room.room, room.players, room.roundState, player.id, 'finalize', null);
         }
 
         room.touch();
@@ -610,7 +619,11 @@ export class RoomManager {
             const activePlayers = room.players.filter(p => p.status === 'active');
             game.applyPositionChoice(room.room, activePlayers, room.roundState, choice);
             room.touch();
-            this._broadcast(room);
+            if (this._handsExhausted(room)) {
+                this._endRound(room, null);
+            } else {
+                this._broadcast(room);
+            }
         } finally {
             room.positionChoiceBusy = false;
         }

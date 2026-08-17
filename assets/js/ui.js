@@ -561,13 +561,16 @@ export function updateBettingButtons(enabled, playerMoney, highestBet, hasRaised
     });
     
     if (callButton) {
-        callButton.disabled = !enabled;
+        // Nothing to call yet (nobody, including this player, has bet) -
+        // there's no such thing as a free check, so this stays disabled
+        // until a real bet is on the table.
+        callButton.disabled = !enabled || highestBet === 0;
     }
-    
+
     if (allInBtn) {
         allInBtn.disabled = !enabled || playerMoney <= 0;
     }
-    
+
     if (finalizeBtn) {
         // Disable finalize if player hasn't acted yet OR not all players have acted (one full round)
         finalizeBtn.disabled = !enabled || betActionCount < 1 || !allPlayersActed;

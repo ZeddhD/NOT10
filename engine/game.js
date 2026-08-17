@@ -202,6 +202,13 @@ export function processBet(room, players, roundState, playerId, action, amount) 
         return { success: true, action: isRaise ? 'raise' : 'bet', amount, newTotal: newPlayerBet };
 
     } else if (action === 'call') {
+        // Nothing to call yet - every player must place a real bet each
+        // round (no free check). tableHighestBet === 0 implies this
+        // player's own bet is also 0 (it can never exceed the table high).
+        if (tableHighestBet === 0) {
+            return { success: false, error: 'You must bet before you can call. Minimum bet is $100 (or all-in).' };
+        }
+
         const callAmount = Math.max(0, tableHighestBet - currentPlayerBet);
 
         if (callAmount > 0) {
@@ -227,7 +234,7 @@ export function processBet(room, players, roundState, playerId, action, amount) 
             playerId,
             playerName: player.name,
             amount: callAmount,
-            message: callAmount > 0 ? `${player.name} called $${callAmount / 100}` : `${player.name} checked`,
+            message: callAmount > 0 ? `${player.name} called $${callAmount / 100}` : `${player.name} matched the bet`,
             timestamp: utils.getTimestamp()
         });
 

@@ -344,12 +344,14 @@ export const AI_DESCRIPTIONS = {
 };
 
 /**
- * AI chooses position (first or last) when they are highest bettor
+ * AI chooses position (first or last) when they are highest bettor.
+ * Only looks at the hand itself, not the table - this choice always
+ * happens at the very start of the playing phase, before any card has
+ * been played, so the table total is always 0 when it's called.
  * @param {AIPlayer} ai - AI player
- * @param {number} tableTotal - Current table total
  * @returns {string} 'first' or 'last'
  */
-export function choosePosition(ai, tableTotal) {
+export function choosePosition(ai) {
     const avgCard = ai.hand.reduce((sum, card) => sum + card, 0) / ai.hand.length;
     const maxCard = Math.max(...ai.hand);
     const minCard = Math.min(...ai.hand);

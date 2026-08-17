@@ -1130,6 +1130,26 @@ h1, h2, h3, h4, h5, h6 {
     filter: brightness(1.1);
 }
 
+/* Desktop only: line Leave/sound up with the sidebar's own right edge,
+   directly above the "Your Money" stat chip, instead of floating above the
+   table disconnected from everything else. The sidebar's padding-top is
+   pushed down to reserve the room these buttons now sit in. */
+@media (min-width: 901px) {
+    #game-screen .corner-action {
+        top: var(--spacing-lg);
+        right: calc(var(--spacing-lg) + 2.75rem + var(--spacing-sm));
+    }
+
+    #app:has(#game-screen:not(.hidden)) .sound-toggle {
+        top: var(--spacing-lg);
+        right: var(--spacing-lg);
+    }
+
+    #game-screen .player-controls {
+        padding-top: calc(var(--spacing-lg) + 2.75rem + var(--spacing-md));
+    }
+}
+
 /* Round counter: top-left, positioned relative to .game-layout (not the
    viewport) so it scrolls away with the page on mobile instead of staying
    pinned like the Leave/sound corner cluster above. */

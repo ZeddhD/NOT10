@@ -1595,32 +1595,37 @@ h1, h2, h3, h4, h5, h6 {
     position: relative;
 }
 
-/* The headline: big, bold, display font - the kind of treatment the
-   rest of the game gives money/stakes numbers, not a plain label. */
-.position-buttons .btn-text {
+/* Deliberately NOT named .btn-text/.btn-hint - those classes already
+   mean something else (the plain underlined text-link style used by
+   "How to Play"/"Clear"). Reusing them here was the actual bug: this
+   span never overrode that rule's color/underline, so the headline
+   rendered in var(--color-accent) with an underline - the same gold as
+   the button's own background, i.e. invisible gold-on-gold text, not
+   an intentional "reveals on hover" effect. */
+.position-btn-label {
     font-family: var(--font-display);
     font-size: 1.35rem;
     font-weight: 900;
     letter-spacing: 0.02em;
     display: block;
+    color: var(--color-ink);
+    text-decoration: none;
 }
 
-/* The description needs to actually look like a caption, not a second
-   headline - .btn forces uppercase on everything inside it by default,
-   which made this read identically to .btn-text (same weight of shout,
-   just smaller) instead of a quieter explanatory line underneath it. */
-.position-buttons .btn-hint {
+/* The description reads as an actual caption, not a second headline -
+   .btn forces uppercase on everything inside it by default, which
+   would otherwise make this look like the same weight of shout as the
+   label, just smaller. */
+.position-btn-hint {
     font-size: 0.72rem;
     font-weight: 600;
     text-transform: none;
     letter-spacing: normal;
-    opacity: 0.75;
     display: block;
     margin-top: 1px;
-}
-
-.position-buttons .btn-primary:hover .btn-hint {
-    opacity: 1;
+    color: var(--color-ink);
+    text-decoration: none;
+    opacity: 0.75;
 }
 
 /* Event Log - the last item in the sidebar column; grows to fill

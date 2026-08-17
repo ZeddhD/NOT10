@@ -229,6 +229,16 @@ h1, h2, h3, h4, h5, h6 {
     font-weight: 600;
     color: var(--color-text-secondary);
     text-align: center;
+    margin-bottom: var(--spacing-sm);
+}
+
+.game-credit {
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: var(--color-text-dim);
+    text-align: center;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
     margin-bottom: var(--spacing-xl);
 }
 
@@ -514,6 +524,8 @@ h1, h2, h3, h4, h5, h6 {
     font-size: 0.875rem;
     font-weight: 700;
     margin-bottom: var(--spacing-sm);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
 }
 
 .player-name-input input {
@@ -697,6 +709,7 @@ h1, h2, h3, h4, h5, h6 {
 .game-layout {
     width: 100%;
     height: 100vh;
+    position: relative;
     display: grid;
     grid-template-columns: 1fr min(380px, 34vw);
     grid-template-rows: 1fr;
@@ -1117,13 +1130,24 @@ h1, h2, h3, h4, h5, h6 {
     filter: brightness(1.1);
 }
 
-/* Round counter joins the same fixed corner cluster, further left of Leave -
-   a static badge (no hover/cursor styling) since it's not clickable. */
-.corner-round {
-    right: 10.75rem;
+/* Round counter: top-left, positioned relative to .game-layout (not the
+   viewport) so it scrolls away with the page on mobile instead of staying
+   pinned like the Leave/sound corner cluster above. */
+.round-badge {
+    position: absolute;
+    top: var(--spacing-md);
+    left: var(--spacing-md);
+    z-index: 5;
+    padding: 0.6rem 1rem;
+    font-size: 0.8rem;
     background: var(--color-bg-secondary);
     color: var(--color-text-secondary);
-    cursor: default;
+    border: var(--border-thick) solid var(--color-ink);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-sm);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-weight: 800;
 }
 
 .sound-toggle.muted {
@@ -1853,6 +1877,136 @@ h1, h2, h3, h4, h5, h6 {
 
 .modal-body strong {
     color: var(--color-accent);
+}
+
+/* === How to Play - redesigned for a one-read skim, not a manual === */
+.howto-goal {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-md);
+    background: var(--color-bg-tertiary);
+    border: var(--border-thick) solid var(--color-accent);
+    border-radius: var(--radius-md);
+    padding: var(--spacing-md) var(--spacing-lg);
+    font-size: 1.05rem;
+    margin-bottom: var(--spacing-lg);
+}
+
+.howto-goal .icon-trophy {
+    flex-shrink: 0;
+    width: 1.8em;
+    height: 1.8em;
+    color: var(--color-accent);
+}
+
+.howto-steps {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-md);
+    margin-bottom: var(--spacing-lg);
+}
+
+.howto-step {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--spacing-md);
+    background: var(--color-bg-tertiary);
+    border-radius: var(--radius-md);
+    padding: var(--spacing-md);
+}
+
+.howto-step-num {
+    flex-shrink: 0;
+    width: 2rem;
+    height: 2rem;
+    background: var(--color-accent);
+    color: var(--color-ink);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--font-display);
+    font-weight: 900;
+    font-size: 1.1rem;
+}
+
+.howto-step p {
+    margin: 0;
+}
+
+.howto-cards {
+    display: flex;
+    gap: var(--spacing-lg);
+    justify-content: center;
+    margin-bottom: var(--spacing-lg);
+}
+
+.howto-card-chip {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--spacing-xs);
+}
+
+.howto-card-chip .card {
+    width: 46px;
+    height: 64px;
+    font-size: 1.4rem;
+    cursor: default;
+}
+
+.howto-card-chip .card:hover {
+    transform: none;
+    box-shadow: var(--shadow-md);
+}
+
+.howto-card-chip span:last-child {
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: var(--color-text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.howto-rules {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--spacing-sm);
+    margin-bottom: var(--spacing-lg);
+}
+
+.howto-rule {
+    background: var(--color-bg-tertiary);
+    border: 2px solid var(--color-accent-dim);
+    border-radius: var(--radius-sm);
+    padding: var(--spacing-xs) var(--spacing-md);
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: var(--color-text-primary);
+}
+
+.howto-bots {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--spacing-sm);
+}
+
+.howto-bot {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-xs);
+    background: var(--color-bg-tertiary);
+    border-radius: var(--radius-sm);
+    padding: var(--spacing-sm) var(--spacing-md);
+    font-weight: 800;
+    color: var(--color-accent);
+}
+
+.howto-bot em {
+    font-style: normal;
+    font-weight: 600;
+    color: var(--color-text-secondary);
+    margin-left: var(--spacing-xs);
 }
 
 /* === Responsive Design ===

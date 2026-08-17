@@ -1285,6 +1285,15 @@ h1, h2, h3, h4, h5, h6 {
     overflow-y: auto;
 }
 
+/* Desktop only: the sidebar sits in the same grid row as the table, so it
+   starts right at the top - same height as the non-fixed Leave/sound pair.
+   Reserve room for them so "Your Money" doesn't render underneath them. */
+@media (min-width: 901px) {
+    #game-screen .player-controls {
+        padding-top: calc(var(--spacing-md) + 2.75rem + var(--spacing-md));
+    }
+}
+
 /* Your own Money and Potential Payout - two distinct, always-visible stat
    chips. Kept separate on purpose: Money is what you have, Potential
    Payout is what you could get, and conflating them into one number was

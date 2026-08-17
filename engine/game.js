@@ -27,17 +27,28 @@ export const GAME_CONSTANTS = {
  * @returns {Object} Round initialization data
  */
 export function startNewRound(room, players) {
-    const activePlayers = players.filter(p => p.money_cents > 0 && p.status === 'active');
-
-    if (activePlayers.length < 2) {
-        return { gameOver: true, winner: activePlayers[0] || players[0] };
+    // Money alone decides whether the game is already over - same
+    // definition checkGameOver() uses. Requiring status === 'active' too
+    // (as this used to) meant that if status ever lagged behind money for
+    // any reason, this check would silently miss it and deal another
+    // round to a table that should have already ended, instead of
+    // declaring the lone player with money left the winner.
+    const playersWithMoney = players.filter(p => p.money_cents > 0);
+    if (playersWithMoney.length < 2) {
+        return { gameOver: true, winner: playersWithMoney[0] || players[0] };
     }
 
+    // Keep status in sync with money for anyone who wasn't already
+    // marked - including a player eliminated last round (endRound
+    // doesn't touch status; they're broke but still nominally 'active'
+    // until this catches them here).
     for (const player of players) {
         if (player.money_cents <= 0 && player.status === 'active') {
             player.status = 'spectator';
         }
     }
+
+    const activePlayers = players.filter(p => p.money_cents > 0 && p.status === 'active');
 
     const newRoundNo = room.current_round + 1;
 
@@ -509,6 +520,17 @@ export function endRound(room, players, roundState, eliminatedPlayerId) {
         message: `Round ended. ${distributionDetails}`,
         timestamp: utils.getTimestamp()
     });
+
+    // Sync status to money right now rather than waiting for the next
+    // startNewRound - a player eliminated this round (or a survivor whose
+    // floor-rounded share left them at exactly $0) should read as
+    // "spectating" the moment the round ends, not sit in limbo showing
+    // neither an active turn nor a spectator tag until the next deal.
+    for (const player of players) {
+        if (player.money_cents <= 0 && player.status === 'active') {
+            player.status = 'spectator';
+        }
+    }
 
     const nextStartingIndex = (room.starting_player_index + 1) % GAME_CONSTANTS.MAX_PLAYERS;
 

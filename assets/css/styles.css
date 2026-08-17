@@ -719,18 +719,33 @@ h1, h2, h3, h4, h5, h6 {
     box-shadow: var(--shadow-sm);
 }
 
-.header-left,
-.header-right {
+.header-left {
     flex: 1;
 }
 
-.header-center {
-    flex: 2;
-    text-align: center;
+#round-number {
+    color: var(--color-text-secondary);
+    font-weight: 700;
+}
+
+/* The pot's own banner, sitting right above the table (see .game-table's
+   top margin, which reserves room for it) - not tucked into the header
+   alongside a round counter and a leave button, both far less important
+   than "how much is actually at stake right now". */
+.table-banner {
+    position: absolute;
+    top: -6.75rem;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 12;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--spacing-sm);
 }
 
 .pot-display {
-    display: inline-block;
+    text-align: center;
 }
 
 .pot-label {
@@ -738,22 +753,22 @@ h1, h2, h3, h4, h5, h6 {
     font-size: 0.75rem;
     font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.1em;
+    letter-spacing: 0.15em;
     display: block;
 }
 
+/* This is the number that matters most on the whole screen - sized and
+   lit accordingly, not just a slightly-bigger label next to the round
+   counter. */
 .pot-amount {
     color: var(--color-stakes);
     font-family: var(--font-display);
-    font-size: 1.8rem;
+    font-size: 2.4rem;
     font-weight: 900;
+    line-height: 1;
     font-variant-numeric: tabular-nums;
     display: block;
-}
-
-#round-number {
-    color: var(--color-text-secondary);
-    font-weight: 700;
+    text-shadow: 2px 2px 0 var(--color-ink), 0 0 24px rgba(255, 143, 63, 0.45);
 }
 
 /* Game Table - a real circular table at every breakpoint, never a flat list.
@@ -779,13 +794,13 @@ h1, h2, h3, h4, h5, h6 {
        object-fit:contain uses) but rendered as a stretched oval in
        practice - not worth the risk over a slightly-approximate header
        height guess here. */
-    width: min(100%, calc(100vh - 168px));
+    width: min(100%, calc(100vh - 228px));
     max-width: 640px;
     aspect-ratio: 1 / 1;
-    /* Top margin reserves room for the phase indicator, which sits just
-       above the table as its own banner (see .phase-indicator) rather
-       than in a table corner already crowded by the top player's panel. */
-    margin: 3rem auto 0;
+    /* Top margin reserves room for .table-banner (pot + phase indicator),
+       which sits just above the table rather than the pot living in the
+       header and the phase indicator crowding the top player's panel. */
+    margin: 6.75rem auto 0;
     padding: 0;
     min-height: 0;
     min-width: 0;
@@ -902,13 +917,9 @@ h1, h2, h3, h4, h5, h6 {
    top player's panel/BUSTED stamp and the fixed corner button cluster,
    consistent at every screen size (see .game-table's top margin, which
    reserves the room for it). */
+/* Just a flex child of .table-banner now, stacked under the pot - no
+   positioning of its own to fight over. */
 .phase-indicator {
-    position: absolute;
-    top: -3rem;
-    left: 50%;
-    right: auto;
-    transform: translateX(-50%);
-    z-index: 12;
     color: var(--color-text-secondary);
     font-size: 0.8rem;
     font-weight: 700;
@@ -1880,11 +1891,10 @@ h1, h2, h3, h4, h5, h6 {
         height: auto;
         width: min(94vw, 520px);
         max-width: none;
-        /* Top margin matches the base .phase-indicator's -3rem offset -
-           same banner-above-table treatment as desktop, just a narrower
-           table. See the base (non-media-query) .game-table/.phase-
-           indicator rules for the full reasoning. */
-        margin: 3rem auto var(--spacing-md);
+        /* Top margin matches the base .table-banner's -6.75rem offset -
+           same pot+phase banner-above-table treatment as desktop, just a
+           narrower table. */
+        margin: 6.75rem auto var(--spacing-md);
     }
 
     /* The one real overlap left inside the table itself: the BUSTED
@@ -1944,23 +1954,11 @@ h1, h2, h3, h4, h5, h6 {
 
     .game-header {
         padding: var(--spacing-sm) var(--spacing-md);
-        flex-wrap: wrap;
-    }
-
-    .header-left,
-    .header-right {
-        flex: auto;
-    }
-
-    .header-center {
-        flex: 100%;
-        order: -1;
-        margin-bottom: var(--spacing-sm);
     }
 
     .game-table {
         width: min(96vw, 380px);
-        margin: 3rem auto var(--spacing-md);
+        margin: 6.75rem auto var(--spacing-md);
     }
 
     .player-controls {

@@ -114,21 +114,13 @@
         <!-- Game Screen -->
         <div id="game-screen" class="screen hidden">
             <div class="game-layout">
-                <!-- Game Header -->
+                <!-- Game Header - just the round number now; pot moved to its
+                     own banner above the table (see .table-banner below),
+                     Leave lives in the fixed top-right corner cluster. -->
                 <div class="game-header">
                     <div class="header-left">
                         <span id="round-number">Round 1</span>
                     </div>
-                    <div class="header-center">
-                        <div class="pot-display">
-                            <span class="pot-label">POT</span>
-                            <span id="pot-amount" class="pot-amount">$0</span>
-                        </div>
-                    </div>
-                    <!-- Empty on purpose - balances header-left so the pot
-                         stays centered; Leave itself now lives in the fixed
-                         top-right corner cluster alongside the sound toggle. -->
-                    <div class="header-right"></div>
                 </div>
                 <button id="leave-game-btn" class="corner-action btn-danger">Leave</button>
 
@@ -148,7 +140,17 @@
                             <span id="table-total" class="total-value">0</span>
                         </div>
                     </div>
-                    <div id="phase-indicator" class="phase-indicator">Dealing...</div>
+
+                    <!-- The pot is the single most important number on
+                         screen - it gets top billing right above the table,
+                         with the phase indicator underneath it. -->
+                    <div class="table-banner">
+                        <div class="pot-display">
+                            <span class="pot-label">POT</span>
+                            <span id="pot-amount" class="pot-amount">$0</span>
+                        </div>
+                        <div id="phase-indicator" class="phase-indicator">Dealing...</div>
+                    </div>
 
                     <!-- Cards played this round - travel in from each seat and
                          stay on the table until the next round starts -->

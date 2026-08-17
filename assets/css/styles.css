@@ -133,7 +133,7 @@ body {
 
 /* === CSS-drawn icons (mask-image, no external assets) === */
 .icon-cards, .icon-door, .icon-bot, .icon-copy, .icon-trophy,
-.icon-leave, .icon-ghost, .icon-check {
+.icon-leave, .icon-ghost, .icon-check, .icon-sound-on, .icon-sound-off {
     display: inline-block;
     width: 1.4em;
     height: 1.4em;
@@ -185,6 +185,16 @@ body {
 .icon-check {
     -webkit-mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path fill='black' d='M4.5 12.5l5 5 10-11-1.6-1.5-8.4 9.2-3.4-3.4z'/></svg>");
     mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path fill='black' d='M4.5 12.5l5 5 10-11-1.6-1.5-8.4 9.2-3.4-3.4z'/></svg>");
+}
+
+.icon-sound-on {
+    -webkit-mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path fill='black' d='M4 9v6h4l5 5V4L8 9H4z'/><path d='M16.5 8.5a5 5 0 0 1 0 7' fill='none' stroke='black' stroke-width='2' stroke-linecap='round'/><path d='M19 6a9 9 0 0 1 0 12' fill='none' stroke='black' stroke-width='2' stroke-linecap='round'/></svg>");
+    mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path fill='black' d='M4 9v6h4l5 5V4L8 9H4z'/><path d='M16.5 8.5a5 5 0 0 1 0 7' fill='none' stroke='black' stroke-width='2' stroke-linecap='round'/><path d='M19 6a9 9 0 0 1 0 12' fill='none' stroke='black' stroke-width='2' stroke-linecap='round'/></svg>");
+}
+
+.icon-sound-off {
+    -webkit-mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path fill='black' d='M4 9v6h4l5 5V4L8 9H4z'/><path d='M15.5 9.5l5 5M20.5 9.5l-5 5' stroke='black' stroke-width='2' stroke-linecap='round'/></svg>");
+    mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path fill='black' d='M4 9v6h4l5 5V4L8 9H4z'/><path d='M15.5 9.5l5 5M20.5 9.5l-5 5' stroke='black' stroke-width='2' stroke-linecap='round'/></svg>");
 }
 
 /* === Typography === */
@@ -1055,6 +1065,32 @@ h1, h2, h3, h4, h5, h6 {
     opacity: 0;
     pointer-events: none;
     z-index: 999;
+}
+
+.sound-toggle {
+    position: fixed;
+    top: var(--spacing-md);
+    right: var(--spacing-md);
+    z-index: 1001;
+    width: 2.75rem;
+    height: 2.75rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--color-bg-secondary);
+    color: var(--color-accent);
+    border: var(--border-thick) solid var(--color-ink);
+    border-radius: 50%;
+    box-shadow: var(--shadow-sm);
+    cursor: pointer;
+}
+
+.sound-toggle:hover {
+    background: var(--color-bg-tertiary);
+}
+
+.sound-toggle.muted {
+    color: var(--color-text-dim);
 }
 
 .bust-flash.firing {

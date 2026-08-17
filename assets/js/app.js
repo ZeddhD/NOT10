@@ -7,6 +7,7 @@ import * as ui from './ui.js';
 import * as utils from './utils.js';
 import * as storage from './storage.js';
 import * as wsClient from './wsClient.js';
+import * as sound from './sound.js';
 import * as game from '../../engine/game.js';
 
 // Global app state. There is only one game mode now - the server is always
@@ -52,6 +53,11 @@ function init() {
 
     // Setup modals
     ui.setupModal('help-modal', 'close-help-btn');
+
+    ui.setSoundToggleState(sound.isMuted());
+    document.getElementById('sound-toggle-btn')?.addEventListener('click', () => {
+        ui.setSoundToggleState(sound.toggleMuted());
+    });
 
     // Handle routing
     handleRoute();
@@ -288,26 +294,32 @@ function handlePlayAI() {
 // their player panel.
 
 function handleMultiplayerRaise(amount) {
+    sound.playBet();
     wsClient.send({ type: 'bet', action: 'bet', amount });
 }
 
 function handleMultiplayerCall() {
+    sound.playConfirm();
     wsClient.send({ type: 'bet', action: 'call', amount: null });
 }
 
 function handleMultiplayerAllIn() {
+    sound.playAllIn();
     wsClient.send({ type: 'bet', action: 'all-in', amount: null });
 }
 
 function handleMultiplayerFinalize() {
+    sound.playConfirm();
     wsClient.send({ type: 'bet', action: 'finalize', amount: null });
 }
 
 function handleMultiplayerCardClick(cardValue) {
+    sound.playCard();
     wsClient.send({ type: 'play_card', value: cardValue });
 }
 
 function handleMultiplayerPositionChoice(choice) {
+    sound.playConfirm();
     wsClient.send({ type: 'choose_position', choice });
 }
 
@@ -391,6 +403,12 @@ function handleStateUpdate(data) {
             if (entry.type === 'play_card') {
                 const p = appState.players.find(pl => pl.id === entry.playerId);
                 if (p) ui.showPlayedCard(p.seat_index, entry.cardValue, isDanger);
+                if (isDanger) {
+                    sound.playBust();
+                } else if (entry.playerId !== appState.currentUser.playerId) {
+                    // Our own plays already got a sound optimistically on click.
+                    sound.playCard();
+                }
             }
         }
 
@@ -401,6 +419,7 @@ function handleStateUpdate(data) {
     if (data.room.status === 'finished') {
         const winner = data.winner || game.checkGameOver(appState.players);
         if (winner) {
+            if (winner.id === appState.currentUser.playerId) sound.playWin();
             ui.showGameOver(winner, appState.players);
         }
     }

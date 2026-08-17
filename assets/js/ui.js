@@ -769,6 +769,18 @@ export function showHelpModal() {
 }
 
 /**
+ * Reflect the sound-muted state on the global toggle button's icon.
+ * @param {boolean} muted
+ */
+export function setSoundToggleState(muted) {
+    const btn = document.getElementById('sound-toggle-btn');
+    if (!btn) return;
+    btn.classList.toggle('muted', muted);
+    btn.innerHTML = `<span class="${muted ? 'icon-sound-off' : 'icon-sound-on'}" aria-hidden="true"></span>`;
+    btn.title = muted ? 'Unmute' : 'Mute';
+}
+
+/**
  * Render create/lobby screen based on room and player state
  * @param {Object} room - Room object
  * @param {Array} players - Players array

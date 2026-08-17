@@ -488,6 +488,17 @@ detection, and position-choice turn ordering.
   rendering, realtime subscriptions, and reconnect flow are only
   exercised by manually playing the game (see the Testing Checklist in
   [DEPLOYMENT.md](DEPLOYMENT.md)).
+- The multiplayer betting turn-advancement, host-driven bot betting/
+  playing/position-choice, and round-end/game-over flow in `app.js`
+  (`advanceMultiplayerBetting`, `maybeHandleBotPositionChoice`,
+  `handleMultiplayerBust`, `triggerBotTurn`) - these were rewritten to fix
+  real bugs (round_state writes to columns `schema.sql` didn't define,
+  `triggerBotTurn` reading room fields off the wrong object, betting
+  never advancing turn_player_id in multiplayer, bots never finalizing
+  their own bets) found by reading the code against a real Postgres
+  schema, not by running a live multiplayer game against Supabase. They
+  are logic-reviewed and internally consistent with the offline/AI-mode
+  code they mirror, but not exercised end to end.
 - Multiplayer concurrency/timing - e.g. whether the host's bot runner and
   a real player's action can race on the same `round_state` row. This
   needs a live, scripted check against a running Supabase project, not a
@@ -495,6 +506,12 @@ detection, and position-choice turn ordering.
 - The `hand_cards` RLS policy's actual behavior against a real Supabase
   project (auth.uid() matching, bot-row exception) - the SQL is reviewed
   but not exercised by an automated test.
+
+**Before relying on multiplayer for a real game night**, play at least one
+full round end-to-end against a real Supabase project (2+ browser tabs,
+at least one bot auto-filled) and watch the browser console on both the
+host tab and a non-host tab for errors - that's the cheapest way to catch
+anything the above review missed.
 
 A clean `npm test` run means the rules are correct in isolation, not that
 the whole game works end to end - see the Testing Checklist in

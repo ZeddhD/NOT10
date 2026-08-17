@@ -481,10 +481,14 @@ function updateGameUI() {
 
     const isMyTurn = appState.room.turn_player_id === appState.currentUser.playerId;
     const isSpectator = myPlayer.status === 'spectator';
-    
+
+    ui.setYourStatsBarVisible(!isSpectator);
+
     if (isSpectator) {
         ui.hideAllControls();
+        ui.hideEarningsBreakdown();
         ui.showSpectatorNotice(true);
+        ui.renderSpectatorStandings(appState.players, appState.currentUser.playerId);
         // Hide hand for spectators
         const handContainer = document.getElementById('hand-cards');
         if (handContainer) {

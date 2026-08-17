@@ -71,6 +71,14 @@ export function startNewRound(room, players) {
         has_raised_json: {},
         bet_action_count_json: {},
         finalized_json: {},
+        // Sequence number of the action that last set each player's bet -
+        // records the actual chronological order bets landed in, since
+        // seat order alone doesn't: a player can raise again on a later
+        // lap, landing well after someone else's single earlier action
+        // even if that player's seat comes first. Used to break ties on
+        // who "reached" the highest bet first (see transitionToPlaying).
+        bet_sequence_json: {},
+        action_counter: 0,
         highest_bettor_id: null,
         highest_bet: 0,
         awaiting_position_choice: false,
@@ -122,6 +130,15 @@ export function processBet(room, players, roundState, playerId, action, amount) 
     }
 
     const bets = roundState.bets_json || {};
+    const betSequence = roundState.bet_sequence_json || {};
+    // Records exactly when (in true action order, not seat order) each
+    // player's current bet amount was set - see the field's definition in
+    // startNewRound for why seat order alone can't be trusted for this.
+    const bumpBetSequence = (id) => {
+        roundState.action_counter = (roundState.action_counter || 0) + 1;
+        betSequence[id] = roundState.action_counter;
+        roundState.bet_sequence_json = betSequence;
+    };
     const hasRaised = roundState.has_raised_json || {};
     const actionCount = roundState.bet_action_count_json || {};
     const finalized = roundState.finalized_json || {};
@@ -169,6 +186,7 @@ export function processBet(room, players, roundState, playerId, action, amount) 
 
         const newPlayerBet = currentPlayerBet + amount;
         bets[playerId] = newPlayerBet;
+        bumpBetSequence(playerId);
         player.money_cents -= amount;
         room.pot_cents += amount;
 
@@ -218,6 +236,7 @@ export function processBet(room, players, roundState, playerId, action, amount) 
             player.money_cents -= callAmount;
             room.pot_cents += callAmount;
             bets[playerId] = tableHighestBet;
+            bumpBetSequence(playerId);
             roundState.bets_json = bets;
         }
 
@@ -248,6 +267,7 @@ export function processBet(room, players, roundState, playerId, action, amount) 
 
         const newPlayerBet = currentPlayerBet + allInAmount;
         bets[playerId] = newPlayerBet;
+        bumpBetSequence(playerId);
         player.money_cents = 0;
         room.pot_cents += allInAmount;
 
@@ -304,20 +324,27 @@ export function isBettingComplete(activePlayers, finalized) {
  */
 export function transitionToPlaying(room, activePlayers, roundState) {
     const bets = roundState.bets_json || {};
+    const betSequence = roundState.bet_sequence_json || {};
     const orderedPlayers = utils.getPlayersInTurnOrder(activePlayers, room.starting_player_index);
 
     let highestBet = 0;
     let highestBettorId = null;
+    let highestBettorSeq = Infinity;
 
-    // Strict > (not >=) on purpose: ties go to whoever reached this bet
-    // amount earliest in turn order, and stay that way below - the tied
-    // players are just identified afterward so the tie can be announced,
-    // not to change who wins it.
+    // Ties go to whoever actually reached this bet amount first - which is
+    // NOT the same as raw seat order. A player can raise again on a later
+    // lap (once betting has already gone all the way around once), landing
+    // well after someone else's single earlier action even though their
+    // seat comes first in the static rotation. bet_sequence_json records
+    // the true action order, so use that instead of orderedPlayers here.
     for (const player of orderedPlayers) {
         const playerBet = bets[player.id] || 0;
-        if (playerBet > highestBet) {
+        if (playerBet <= 0) continue;
+        const seq = betSequence[player.id] ?? Infinity;
+        if (playerBet > highestBet || (playerBet === highestBet && seq < highestBettorSeq)) {
             highestBet = playerBet;
             highestBettorId = player.id;
+            highestBettorSeq = seq;
         }
     }
 

@@ -429,6 +429,37 @@ describe('game.transitionToPlaying + game.applyPositionChoice', () => {
         expect(tieEntry.message).toMatch(/tied with c/);
     });
 
+    it('breaks a tie by true chronological order, not seat order, when a raise happens on a later lap', () => {
+        // a is seat 0 (first in raw seat order), b is seat 1. Both end up
+        // tied at $1,000, but b reaches it FIRST in real turn order: a bets
+        // small on lap 1, b goes ALL-IN for the full $1,000 on lap 1, then
+        // a doesn't reach $1,000 until a second lap. Seat order alone would
+        // wrongly hand the tie to a (seat 0 < seat 1) - this is exactly the
+        // reported bug where the wrong player got the highest-bettor power.
+        const room = makeRoom({ starting_player_index: 0 });
+        const players = [
+            makePlayer('a', { seat_index: 0, money_cents: 100000 }),
+            makePlayer('b', { seat_index: 1, money_cents: 100000 }),
+            makePlayer('c', { seat_index: 2, money_cents: 100000 })
+        ];
+        const roundState = makeRoundState();
+        room.turn_player_id = 'a';
+
+        game.processBet(room, players, roundState, 'a', 'bet', 20000); // lap 1: a -> $200
+        room.turn_player_id = 'b';
+        game.processBet(room, players, roundState, 'b', 'all-in', null); // lap 1: b -> $1,000 (ties eventually)
+        room.turn_player_id = 'c';
+        game.processBet(room, players, roundState, 'c', 'bet', 20000); // lap 1: c -> $200
+        room.turn_player_id = 'a';
+        game.processBet(room, players, roundState, 'a', 'all-in', null); // lap 2: a -> $1,000 (ties, but later)
+
+        const transition = game.transitionToPlaying(room, players, roundState);
+        expect(transition.highestBettorId).toBe('b');
+
+        const tieEntry = roundState.log_json.find(e => e.type === 'tie_break');
+        expect(tieEntry.playerId).toBe('b');
+    });
+
     it('play order after GO FIRST holds for the whole round, not just the first card', () => {
         const room = makeRoom({ starting_player_index: 0 });
         const players = [

@@ -146,7 +146,7 @@ export function updateTurnArrow(players, turnPlayerId) {
     }
     arrow.style.opacity = '1';
     const angle = SEAT_ANGLE[turnPlayer.seat_index] ?? 0;
-    arrow.style.transform = `translateX(-50%) rotate(${angle}deg)`;
+    arrow.style.transform = `rotate(${angle}deg) translate(-8px, calc(-1 * var(--turn-radius)))`;
 }
 
 /**

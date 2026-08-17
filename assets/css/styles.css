@@ -843,11 +843,22 @@ h1, h2, h3, h4, h5, h6 {
     border-radius: 50%;
     border: 2px dashed rgba(255, 183, 3, 0.25);
     pointer-events: none;
+    /* Distance from center the arrow sits at - inherited by .turn-arrow.
+       clamp(90px,21cqw,130px) is this ring's own radius (half its width). */
+    --turn-radius: calc(clamp(90px, 21cqw, 130px) + 14px);
 }
 
+/* Rotate-then-translate (in that order in the transform list, which CSS
+   applies right-to-left) so the arrow moves out by exactly --turn-radius in
+   its own local "up" direction *before* rotating around the ring's true
+   center - a fixed radius at every angle. The previous approach (rotating
+   around an off-center transform-origin computed from this element's own
+   lopsided border-triangle box) put the pivot a few px off-center, which
+   doesn't matter much on its own but got amplified by the rotation into a
+   visibly different gap at different seats instead of a consistent ring. */
 .turn-arrow {
     position: absolute;
-    top: -3px;
+    top: 50%;
     left: 50%;
     width: 0;
     height: 0;
@@ -855,8 +866,8 @@ h1, h2, h3, h4, h5, h6 {
     border-right: 8px solid transparent;
     border-bottom: 14px solid var(--color-accent);
     filter: drop-shadow(1px 1px 0 var(--color-ink));
-    transform-origin: 50% calc(clamp(90px, 21cqw, 130px) + 14px);
-    transform: translateX(-50%) rotate(0deg);
+    transform-origin: 0 0;
+    transform: rotate(0deg) translate(-8px, calc(-1 * var(--turn-radius)));
     transition: transform var(--transition-impact);
 }
 
@@ -2155,10 +2166,7 @@ h1, h2, h3, h4, h5, h6 {
     .turn-ring {
         width: clamp(110px, 20cqw, 150px);
         height: clamp(110px, 20cqw, 150px);
-    }
-
-    .turn-arrow {
-        transform-origin: 50% calc(clamp(55px, 10cqw, 75px) + 3px);
+        --turn-radius: calc(clamp(55px, 10cqw, 75px) + 3px);
     }
 
     .player-controls {

@@ -2249,6 +2249,35 @@ h1, h2, h3, h4, h5, h6 {
         max-width: 100%;
     }
 
+    /* Top/bottom seats specifically get the wider "landscape" panel shape
+       from desktop instead of the taller/narrower stacked-stat shape every
+       other mobile seat uses - two stacked stat rows, plus (for whoever's
+       turn it is) a wrapped "YOUR TURN" line, made those two seats
+       noticeably squarer/taller than Carl/Alex at the sides. Widening just
+       these two and putting their stats back in a row undoes that without
+       reintroducing the bet-text overflow the stacked layout above exists
+       to prevent - there's now enough width for it not to happen. */
+    .player-panel.pos-0,
+    .player-panel.pos-2 {
+        width: clamp(150px, 44cqw, 230px);
+    }
+
+    .player-panel.pos-0 .player-stats,
+    .player-panel.pos-2 .player-stats {
+        flex-direction: row;
+        gap: var(--spacing-md);
+    }
+
+    .player-panel.pos-0 .player-money,
+    .player-panel.pos-0 .player-bet,
+    .player-panel.pos-2 .player-money,
+    .player-panel.pos-2 .player-bet {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 100%;
+    }
+
     /* The turn-order ring's radius was close enough to the played-card
        chips' resting radius (--chip-radius on .game-table) that the turn
        arrow could land right on top of a chip once one was played. Pull

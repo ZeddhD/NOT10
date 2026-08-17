@@ -75,7 +75,8 @@ function init() {
 function handleSocketOpen() {
     const savedRoomCode = storage.getRoomCode();
     if (savedRoomCode) {
-        wsClient.send({ type: 'rejoin', playerId: appState.currentUser.playerId, roomCode: savedRoomCode });
+        const sessionToken = storage.getSession()?.sessionToken;
+        wsClient.send({ type: 'rejoin', playerId: appState.currentUser.playerId, roomCode: savedRoomCode, sessionToken });
     }
 }
 
@@ -361,6 +362,9 @@ function handleStateUpdate(data) {
     appState.roomCode = data.room.code;
 
     storage.saveRoomCode(data.room.code);
+    // The server's rejoin credential for this player - never sent to
+    // anyone but the player it belongs to (see server/rooms.js::_broadcast).
+    if (data.sessionToken) storage.saveSession({ sessionToken: data.sessionToken });
 
     if (data.room.status === 'lobby') {
         // "Play vs AI" shortcut: skip the lobby screen entirely and

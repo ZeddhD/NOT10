@@ -11,6 +11,7 @@
  * and trusting the client to hide the rest.
  */
 
+import { randomUUID } from 'node:crypto';
 import * as game from '../engine/game.js';
 import * as ai from '../engine/ai.js';
 import * as utils from '../engine/utils.js';
@@ -21,6 +22,12 @@ const REAP_CHECK_MS = 5 * 60 * 1000;
 const TURN_TICK_MS = 1000;
 const BOT_PERSONALITIES = ['cautious', 'balanced', 'aggressive'];
 const FALLBACK_PERSONALITY = 'cautious'; // used to auto-pilot a disconnected human
+
+// Per-connection message rate limit - generous for real gameplay (a human
+// clicking buttons or bots ticking never gets close to this), just enough
+// to stop a single connection from flooding the room-tick/broadcast loop.
+const RATE_LIMIT_WINDOW_MS = 5_000;
+const RATE_LIMIT_MAX_MESSAGES = 40;
 
 // Matches the personality descriptions in the in-app help modal (Carl the
 // cautious bot, Betty the balanced bot, Alex the aggressive bot) so a
@@ -48,6 +55,7 @@ class Room {
         this.players = [];
         this.roundState = null;
         this.hands = new Map(); // playerId -> number[] (server-only, never fully broadcast)
+        this.sessionTokens = new Map(); // playerId -> secret rejoin token (server-only, never broadcast to anyone but the owner)
         this.sockets = new Map(); // playerId -> ws
         this.disconnectTimers = new Map(); // playerId -> Timeout
         this.lastActivity = Date.now();
@@ -64,9 +72,18 @@ export class RoomManager {
     constructor() {
         this.rooms = new Map(); // code -> Room
         this.socketMeta = new Map(); // ws -> { code, playerId }
+        this.rateLimits = new WeakMap(); // ws -> message timestamps (sliding window)
 
         this.turnInterval = setInterval(() => this._tickAll(), TURN_TICK_MS);
         this.reapInterval = setInterval(() => this._reapIdleRooms(), REAP_CHECK_MS);
+    }
+
+    _checkRateLimit(ws) {
+        const now = Date.now();
+        const timestamps = (this.rateLimits.get(ws) || []).filter(t => now - t < RATE_LIMIT_WINDOW_MS);
+        timestamps.push(now);
+        this.rateLimits.set(ws, timestamps);
+        return timestamps.length <= RATE_LIMIT_MAX_MESSAGES;
     }
 
     stop() {
@@ -79,6 +96,10 @@ export class RoomManager {
     // ==========================================
 
     handleMessage(ws, raw) {
+        if (!this._checkRateLimit(ws)) {
+            return this._sendError(ws, 'Too many messages - slow down');
+        }
+
         let msg;
         try {
             msg = JSON.parse(raw);
@@ -168,6 +189,7 @@ export class RoomManager {
             connected: true
         });
 
+        room.sessionTokens.set(playerId, randomUUID());
         this.rooms.set(code, room);
         this._attachSocket(room, ws, playerId);
         this._broadcast(room);
@@ -199,16 +221,24 @@ export class RoomManager {
             connected: true
         });
 
+        room.sessionTokens.set(playerId, randomUUID());
         this._attachSocket(room, ws, playerId);
         this._broadcast(room);
     }
 
-    _rejoin(ws, { playerId, roomCode }) {
+    _rejoin(ws, { playerId, roomCode, sessionToken }) {
         const room = this.rooms.get((roomCode || '').toUpperCase());
         if (!room) return this._sendError(ws, 'Room not found', { reason: 'rejoin_failed' });
 
         const player = room.players.find(p => p.id === playerId);
         if (!player) return this._sendError(ws, 'You are not in this room', { reason: 'rejoin_failed' });
+
+        // Player IDs are just localStorage UUIDs, not proof of identity on
+        // their own - without this, anyone who learned another player's ID
+        // could rejoin as them and take over their seat/hand/money mid-game.
+        if (room.sessionTokens.get(playerId) !== sessionToken) {
+            return this._sendError(ws, 'Session expired or invalid', { reason: 'rejoin_failed' });
+        }
 
         const timer = room.disconnectTimers.get(playerId);
         if (timer) {
@@ -694,6 +724,10 @@ export class RoomManager {
                 roundState: room.roundState,
                 yourHand: room.hands.get(playerId) || [],
                 isHost: room.room.host_id === playerId,
+                // Only ever sent to this player's own socket, never to
+                // room.players (which every client sees) - that's what
+                // makes it usable as a rejoin credential.
+                sessionToken: room.sessionTokens.get(playerId),
                 ...extra
             });
         }

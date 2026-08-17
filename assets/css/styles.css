@@ -773,8 +773,8 @@ h1, h2, h3, h4, h5, h6 {
     align-self: center;
     justify-self: center;
     /* Lets --chip-radius below use cqw (% of *this* element's own width)
-       instead of vw (% of the viewport) - the table is capped at
-       max-width:640px, so on an ultra-wide viewport a vw-based radius
+       instead of vw (% of the viewport) - the table is still capped (see
+       max-width below), so on an ultra-wide viewport a vw-based radius
        would compute far larger than the table itself and push the chips
        off it entirely. */
     container-type: inline-size;
@@ -784,9 +784,13 @@ h1, h2, h3, h4, h5, h6 {
        paper (the same "largest square that fits both axes" logic
        object-fit:contain uses) but rendered as a stretched oval in
        practice - not worth the risk over a slightly-approximate header
-       height guess here. */
-    width: min(100%, calc(100vh - 228px));
-    max-width: 640px;
+       height guess here. Desktop max-width raised from 640px - on a wide
+       viewport the table column has far more room than that, and every
+       cqw-scaled thing inside (panels, cards, chip radius) already has its
+       own clamp() ceiling, so growing the table doesn't blow anything up,
+       it just uses the space that was sitting empty on either side. */
+    width: min(100%, calc(100vh - 200px));
+    max-width: 860px;
     aspect-ratio: 1 / 1;
     /* Top margin reserves room for .table-banner (pot + phase indicator),
        which sits just above the table rather than the pot living in the

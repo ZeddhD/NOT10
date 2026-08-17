@@ -2052,10 +2052,10 @@ h1, h2, h3, h4, h5, h6 {
         height: auto;
         width: min(94vw, 520px);
         max-width: none;
-        /* Top margin matches the base .table-banner's -6.75rem offset -
-           same pot+phase banner-above-table treatment as desktop, just a
-           narrower table. */
-        margin: 6.75rem auto var(--spacing-md);
+        /* Extra margin beyond the base -6.75rem table-banner offset so the
+           pot clears the round/leave/sound row with a visible gap, instead
+           of sitting flush against it. */
+        margin: 11rem auto var(--spacing-md);
     }
 
     /* The one real overlap left inside the table itself: the BUSTED
@@ -2146,7 +2146,7 @@ h1, h2, h3, h4, h5, h6 {
 
     .game-table {
         width: min(96vw, 380px);
-        margin: 6.75rem auto var(--spacing-md);
+        margin: 11rem auto var(--spacing-md);
     }
 
     .player-controls {

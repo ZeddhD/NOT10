@@ -214,7 +214,7 @@ describe('game.processCardPlay', () => {
     beforeEach(() => {
         room = makeRoom({ phase: 'playing', turn_player_id: 'p1' });
         players = [makePlayer('p1', { seat_index: 0 }), makePlayer('p2', { seat_index: 1 })];
-        roundState = makeRoundState();
+        roundState = makeRoundState({ play_order: ['p1', 'p2'] });
     });
 
     it('rejects a play when it is not that player\'s turn', () => {
@@ -370,6 +370,24 @@ describe('game.transitionToPlaying + game.applyPositionChoice', () => {
         const tieEntry = roundState.log_json.find(e => e.type === 'tie_break');
         expect(tieEntry).toBeTruthy();
         expect(tieEntry.message).toMatch(/tied with c/);
+    });
+
+    it('play order after GO FIRST holds for the whole round, not just the first card', () => {
+        const room = makeRoom({ starting_player_index: 0 });
+        const players = [
+            makePlayer('a', { seat_index: 0 }),
+            makePlayer('b', { seat_index: 1 }),
+            makePlayer('c', { seat_index: 2 }),
+            makePlayer('d', { seat_index: 3 })
+        ];
+        const roundState = makeRoundState({ bets_json: { a: 10000, b: 10000, c: 10000, d: 30000 }, log_json: [] });
+
+        game.transitionToPlaying(room, players, roundState);
+        game.applyPositionChoice(room, players, roundState, 'first'); // d (highest bettor) goes first
+        expect(roundState.play_order).toEqual(['d', 'a', 'b', 'c']);
+
+        game.processCardPlay(room, players, roundState, 'd', 0);
+        expect(room.turn_player_id).toBe('a'); // not b - naive seat_index math would have picked b
     });
 
     it('does not announce a tie when there isn\'t one', () => {

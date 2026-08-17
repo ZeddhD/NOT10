@@ -33,6 +33,7 @@
             <div class="menu-content">
                 <h1 class="game-title glow">NOT10</h1>
                 <p class="game-subtitle">Bet Smart. Play Smart. Don't Hit 10.</p>
+                <p class="game-credit">Made by ZeddhD</p>
 
                 <div class="player-name-input menu-name-input">
                     <label for="player-name-field">Your Name</label>
@@ -66,6 +67,11 @@
                 <h2 class="screen-title">Join Lobby</h2>
 
                 <div class="join-form">
+                    <div class="form-group">
+                        <label for="join-player-name">Your Name</label>
+                        <input type="text" id="join-player-name" maxlength="20" placeholder="Enter your name">
+                    </div>
+
                     <div class="form-group">
                         <label for="join-room-code">Room Code</label>
                         <input type="text" id="join-room-code" maxlength="6" placeholder="ABC123" style="text-transform: uppercase;">
@@ -114,9 +120,12 @@
         <!-- Game Screen -->
         <div id="game-screen" class="screen hidden">
             <div class="game-layout">
-                <!-- Fixed top-right corner cluster: round counter, Leave, sound toggle.
-                     Pot moved to its own banner above the table (see .table-banner below). -->
-                <span id="round-number" class="corner-action corner-round">Round 1</span>
+                <!-- Round counter: top-left, scrolls with the page (unlike the fixed
+                     Leave/sound cluster below, which stays put while scrolling). -->
+                <span id="round-number" class="round-badge">Round 1</span>
+
+                <!-- Fixed top-right corner cluster: Leave, sound toggle. Pot moved to
+                     its own banner above the table (see .table-banner below). -->
                 <button id="leave-game-btn" class="corner-action btn-danger">Leave</button>
 
                 <!-- Table Area -->
@@ -361,71 +370,51 @@
                     <h2>How to Play NOT10</h2>
                     <button id="close-help-btn" class="btn-close">×</button>
                 </div>
-                <div class="modal-body">
-                    <h3>Objective</h3>
-                    <p>Be the last player with money. Avoid being the one to push the table total to 10 or higher.</p>
+                <div class="modal-body howto-body">
+                    <p class="howto-goal">
+                        <span class="icon-trophy" aria-hidden="true"></span>
+                        Be the <strong>last player with money</strong>. Don't be the one who pushes the table to <strong>10</strong>.
+                    </p>
 
-                    <h3>Setup</h3>
-                    <ul>
-                        <li>2-4 players start with <strong>$1,000</strong> each</li>
-                        <li>40-card deck: 10 cards each of values <strong>0, 1, 2, 3</strong></li>
-                        <li>Cards dealt: <strong>4 cards</strong> (3-4 players) or <strong>6 cards</strong> (2 players)</li>
-                        <li>Starting player chosen randomly, then rotates clockwise</li>
-                    </ul>
+                    <div class="howto-steps">
+                        <div class="howto-step">
+                            <span class="howto-step-num">1</span>
+                            <p><strong>Bet.</strong> Everyone bets in secret, $100+ at a time. Biggest bettor wins the biggest pot share <em>and</em> picks who goes first.</p>
+                        </div>
+                        <div class="howto-step">
+                            <span class="howto-step-num">2</span>
+                            <p><strong>Play.</strong> Take turns dropping one card. Its number adds to the shared table total.</p>
+                        </div>
+                        <div class="howto-step">
+                            <span class="howto-step-num">3</span>
+                            <p><strong>Survive.</strong> Push the total to 10+ on your turn and you're out. Everyone left splits the pot.</p>
+                        </div>
+                    </div>
 
-                    <h3>Betting Rules</h3>
-                    <ul>
-                        <li><strong>Minimum bet: $100</strong> (or all-in if you have less)</li>
-                        <li>If you have <strong>less than $100</strong>, you MUST go all-in</li>
-                        <li><strong>Must make at least ONE bet action</strong> before you can finalize</li>
-                        <li>Bet increments: <strong>+$100, +$200, +$500</strong> only</li>
-                        <li>You can bet <strong>multiple times</strong> before finalizing</li>
-                        <li><strong>CALL</strong> matches highest bet and auto-finalizes</li>
-                        <li><strong>ALL-IN</strong> bets everything and auto-finalizes</li>
-                        <li><strong>FINALIZE</strong> locks your bet (only available after betting once)</li>
-                        <li>Round starts when <strong>ALL players finalize</strong></li>
-                    </ul>
+                    <h3>Card Values</h3>
+                    <div class="howto-cards">
+                        <div class="howto-card-chip"><span class="card card-0" data-value="0">0</span><span>Safe</span></div>
+                        <div class="howto-card-chip"><span class="card card-1" data-value="1">1</span><span>Low</span></div>
+                        <div class="howto-card-chip"><span class="card card-2" data-value="2">2</span><span>Risky</span></div>
+                        <div class="howto-card-chip"><span class="card card-3" data-value="3">3</span><span>Danger</span></div>
+                    </div>
 
-                    <h3>Playing Cards</h3>
-                    <ul>
-                        <li>Players take turns <strong>clockwise</strong> playing one card</li>
-                        <li>Table total <strong>increases</strong> by the card's value</li>
-                        <li>Card colors: <strong>0=White, 1=Green, 2=Blue, 3=Red</strong></li>
-                        <li>If total reaches <strong>10 or higher</strong> after YOUR card &rarr; You're <strong>ELIMINATED</strong></li>
-                        <li>Only one player eliminated per round</li>
-                    </ul>
+                    <h3>Quick Rules</h3>
+                    <div class="howto-rules">
+                        <span class="howto-rule">Under $100? You go ALL-IN</span>
+                        <span class="howto-rule">CALL matches the top bet</span>
+                        <span class="howto-rule">FINALIZE locks your bet in</span>
+                        <span class="howto-rule">Round starts once everyone finalizes</span>
+                        <span class="howto-rule">Broke players spectate</span>
+                        <span class="howto-rule">Last player standing takes it all</span>
+                    </div>
 
-                    <h3>Pot Distribution &amp; Play Order</h3>
-                    <ul>
-                        <li><strong>WEIGHTED POT</strong>: Share proportional to your bet amount!</li>
-                        <li><strong>Formula</strong>: Your Share = (Your Bet ÷ Survivor Bets) × Pot</li>
-                        <li><strong>Example</strong>: Bet $500, others bet $100 each → You get 50%+ of pot!</li>
-                        <li><strong>Big bets = BIG rewards</strong> if you survive (but big losses if you bust)</li>
-                        <li><strong>Small bets = Small rewards</strong> (safe but less profit)</li>
-                        <li><strong>HIGHEST BETTOR CHOOSES POSITION</strong> = Go FIRST or LAST!</li>
-                        <li><strong>GO FIRST</strong>: Apply pressure, show strength (best with low cards)</li>
-                        <li><strong>GO LAST</strong>: See all cards first, perfect info (best with risky cards)</li>
-                        <li>Eliminated player gets $0</li>
-                        <li>If your money reaches $0 → Spectator</li>
-                        <li>Game ends when one player has all the money</li>
-                    </ul>
-
-                    <h3>Strategic Implications</h3>
-                    <ul>
-                        <li><strong>Strong hand (0s, 1s)</strong>: BET BIG! Get huge pot share + choose FIRST to intimidate</li>
-                        <li><strong>Weak hand (2s, 3s)</strong>: Bet big to choose LAST position = see all cards</li>
-                        <li><strong>Position choice</strong>: Adds skill-based decision making</li>
-                        <li><strong>Mind games</strong>: Why did they choose first? Bluff or strength?</li>
-                        <li><strong>Risk/Reward</strong>: Calculate if big bet is worth potential loss</li>
-                        <li><strong>Fewer survivors</strong>: Larger shares for everyone</li>
-                    </ul>
-
-                    <h3>Bot Personalities</h3>
-                    <ul>
-                        <li><strong>Carl (Cautious)</strong>: Min bets, finalizes early (60-80%)</li>
-                        <li><strong>Betty (Balanced)</strong>: Moderate strategy (40-60% finalize)</li>
-                        <li><strong>Alex (Aggressive)</strong>: High bets, finalizes late (30-50%)</li>
-                    </ul>
+                    <h3>The Bots</h3>
+                    <div class="howto-bots">
+                        <span class="howto-bot"><span class="icon-bot" aria-hidden="true"></span> Carl <em>Cautious</em></span>
+                        <span class="howto-bot"><span class="icon-bot" aria-hidden="true"></span> Betty <em>Balanced</em></span>
+                        <span class="howto-bot"><span class="icon-bot" aria-hidden="true"></span> Alex <em>Aggressive</em></span>
+                    </div>
                 </div>
             </div>
         </div>

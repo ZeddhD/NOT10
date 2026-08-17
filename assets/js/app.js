@@ -99,6 +99,8 @@ function setupEventListeners() {
         nameField.addEventListener('input', () => {
             appState.currentUser.name = nameField.value.trim();
             storage.savePlayerName(appState.currentUser.name);
+            const joinField = document.getElementById('join-player-name');
+            if (joinField) joinField.value = appState.currentUser.name;
         });
     }
     document.getElementById('create-lobby-btn')?.addEventListener('click', handleCreateLobby);
@@ -108,7 +110,17 @@ function setupEventListeners() {
     document.getElementById('play-ai-btn')?.addEventListener('click', handlePlayAI);
     document.getElementById('help-btn')?.addEventListener('click', ui.showHelpModal);
 
-    // Join screen
+    // Join screen - its own name field, kept in sync with the menu screen's
+    // so either one can be the first place a player ever types their name.
+    const joinNameField = document.getElementById('join-player-name');
+    if (joinNameField) {
+        joinNameField.value = appState.currentUser.name;
+        joinNameField.addEventListener('input', () => {
+            appState.currentUser.name = joinNameField.value.trim();
+            storage.savePlayerName(appState.currentUser.name);
+            if (nameField) nameField.value = appState.currentUser.name;
+        });
+    }
     document.getElementById('join-room-btn')?.addEventListener('click', handleJoinRoom);
     document.getElementById('back-from-join-btn')?.addEventListener('click', () => {
         window.location.hash = '#/menu';

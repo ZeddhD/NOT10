@@ -8,9 +8,15 @@
 let socket = null;
 let onMessage = null;
 let onOpen = null;
+let onReplaced = null;
 let reconnectAttempts = 0;
 let intentionalClose = false;
 let pendingQueue = [];
+
+// Close code the server uses when this player's ID connects from another
+// tab/window - the old connection must NOT auto-reconnect (it would just
+// immediately re-kick the new tab, and the two would fight forever).
+const REPLACED_CODE = 4001;
 
 function wsUrl() {
     const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -22,9 +28,10 @@ function wsUrl() {
  * @param {Function} messageHandler - called with each parsed server message
  * @param {Function} openHandler - called every time the socket (re)connects
  */
-export function connect(messageHandler, openHandler) {
+export function connect(messageHandler, openHandler, replacedHandler) {
     onMessage = messageHandler;
     onOpen = openHandler;
+    onReplaced = replacedHandler;
     intentionalClose = false;
     _open();
 }
@@ -51,8 +58,13 @@ function _open() {
         onMessage?.(data);
     });
 
-    socket.addEventListener('close', () => {
+    socket.addEventListener('close', (event) => {
         if (intentionalClose) return;
+        if (event.code === REPLACED_CODE) {
+            intentionalClose = true; // don't auto-reconnect - see REPLACED_CODE comment
+            onReplaced?.();
+            return;
+        }
         reconnectAttempts++;
         const delay = Math.min(1000 * reconnectAttempts, 5000);
         setTimeout(_open, delay);

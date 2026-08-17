@@ -222,6 +222,16 @@ export class RoomManager {
     }
 
     _attachSocket(room, ws, playerId) {
+        // Same player already has a live connection (a second tab/window
+        // opened the game) - only the newest socket per playerId ever
+        // receives broadcasts, so the older one would otherwise sit open
+        // but silently stop updating, looking exactly like a frozen game
+        // to whoever's still on it. Close it explicitly instead.
+        const existing = room.sockets.get(playerId);
+        if (existing && existing !== ws && existing.readyState === existing.OPEN) {
+            this.socketMeta.delete(existing);
+            existing.close(4001, 'Connected from another tab/window');
+        }
         room.sockets.set(playerId, ws);
         this.socketMeta.set(ws, { code: room.code, playerId });
         room.touch();

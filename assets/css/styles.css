@@ -1106,15 +1106,21 @@ h1, h2, h3, h4, h5, h6 {
     background: var(--color-bg-tertiary);
 }
 
-/* Leave sits right next to the sound toggle - a deliberate fixed corner
-   cluster, not a button that happened to land wherever the header's flex
-   wrap put it (which is what it looked like before: centered-ish, out of
-   place, different on every screen width). */
-.corner-action {
-    position: fixed;
+/* On the game screen, sound joins Leave and the round counter as a
+   permanent (non-fixed) trio that scrolls away with the page instead of
+   staying pinned - all three share the same top offset so they read as one
+   aligned row, Round on the left, Leave+sound on the right. */
+#app:has(#game-screen:not(.hidden)) .sound-toggle {
+    position: absolute;
     top: var(--spacing-md);
-    right: 4.5rem;
-    z-index: 1001;
+    right: var(--spacing-md);
+}
+
+.corner-action {
+    position: absolute;
+    top: var(--spacing-md);
+    right: calc(var(--spacing-md) + 2.75rem + var(--spacing-sm));
+    z-index: 5;
     padding: 0.6rem 1rem;
     font-size: 0.8rem;
     border: var(--border-thick) solid var(--color-ink);
@@ -1130,29 +1136,9 @@ h1, h2, h3, h4, h5, h6 {
     filter: brightness(1.1);
 }
 
-/* Desktop only: line Leave/sound up with the sidebar's own right edge,
-   directly above the "Your Money" stat chip, instead of floating above the
-   table disconnected from everything else. The sidebar's padding-top is
-   pushed down to reserve the room these buttons now sit in. */
-@media (min-width: 901px) {
-    #game-screen .corner-action {
-        top: var(--spacing-lg);
-        right: calc(var(--spacing-lg) + 2.75rem + var(--spacing-sm));
-    }
-
-    #app:has(#game-screen:not(.hidden)) .sound-toggle {
-        top: var(--spacing-lg);
-        right: var(--spacing-lg);
-    }
-
-    #game-screen .player-controls {
-        padding-top: calc(var(--spacing-lg) + 2.75rem + var(--spacing-md));
-    }
-}
-
 /* Round counter: top-left, positioned relative to .game-layout (not the
-   viewport) so it scrolls away with the page on mobile instead of staying
-   pinned like the Leave/sound corner cluster above. */
+   viewport) so it scrolls away with the page - same non-fixed treatment as
+   Leave/sound above, so all three read as one aligned top row. */
 .round-badge {
     position: absolute;
     top: var(--spacing-md);

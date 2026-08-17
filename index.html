@@ -120,12 +120,12 @@
         <!-- Game Screen -->
         <div id="game-screen" class="screen hidden">
             <div class="game-layout">
-                <!-- Round counter: top-left, scrolls with the page (unlike the fixed
-                     Leave/sound cluster below, which stays put while scrolling). -->
+                <!-- Round counter: top-left, non-fixed so it scrolls with the page. -->
                 <span id="round-number" class="round-badge">Round 1</span>
 
-                <!-- Fixed top-right corner cluster: Leave, sound toggle. Pot moved to
-                     its own banner above the table (see .table-banner below). -->
+                <!-- Top-right, aligned with the round counter above: Leave, sound
+                     toggle. Also non-fixed, scrolls with the page. Pot moved to its
+                     own banner above the table (see .table-banner below). -->
                 <button id="leave-game-btn" class="corner-action btn-danger">Leave</button>
 
                 <!-- Table Area -->

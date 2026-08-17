@@ -365,6 +365,7 @@ NOT10/
 ├── DEPLOYMENT.md              # Step-by-step deployment guide
 ├── package.json                # Dev-only: vitest for `npm test`
 ├── vercel.json                 # Declarative Vercel deploy config
+├── render.yaml                  # Declarative Render (static site) deploy config
 ├── netlify.toml                 # Declarative Netlify deploy config
 ├── .gitignore                 # Git ignore patterns
 │

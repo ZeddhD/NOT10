@@ -314,6 +314,12 @@ export function transitionToPlaying(room, activePlayers, roundState) {
     // spectator sitting between two active seats (or a later position
     // choice) doesn't get silently re-derived and skip someone.
     roundState.play_order = orderedPlayers.map(p => p.id);
+    // Was previously never set here - when no position choice was needed,
+    // turn_player_id was left at whatever it was from betting (stale),
+    // which could desync from play_order[0] and make the first card
+    // play look like the same player going twice. applyPositionChoice
+    // overwrites this right after, when a choice does happen.
+    room.turn_player_id = orderedPlayers[0]?.id ?? room.turn_player_id;
 
     return {
         success: true,
@@ -420,8 +426,18 @@ export function processCardPlay(room, players, roundState, playerId, cardValue) 
     // first one, and could skip an active player entirely.
     const order = roundState.play_order || [];
     const myOrderIndex = order.indexOf(playerId);
-    const nextPlayerId = myOrderIndex !== -1 ? order[(myOrderIndex + 1) % order.length] : null;
-    const nextPlayer = players.find(p => p.id === nextPlayerId && p.status === 'active');
+    let nextPlayer = myOrderIndex !== -1
+        ? players.find(p => p.id === order[(myOrderIndex + 1) % order.length] && p.status === 'active')
+        : null;
+    // Hard invariant: the same player must never get two turns in a row.
+    // If play_order didn't resolve a next player for any reason, fall
+    // back to seat-order adjacency rather than silently leaving
+    // turn_player_id unchanged (which is exactly what a repeat looks like).
+    if (!nextPlayer) {
+        const activePlayers = players.filter(p => p.status === 'active');
+        const nextIdx = utils.getNextPlayerIndex(player.seat_index, activePlayers);
+        nextPlayer = activePlayers.find(p => p.seat_index === nextIdx);
+    }
 
     if (nextPlayer) {
         room.turn_player_id = nextPlayer.id;

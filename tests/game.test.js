@@ -196,6 +196,14 @@ describe('game.processBet', () => {
         expect(result.error).toMatch(/all players have bet/i);
     });
 
+    it('rejects call when nobody has bet yet - no free check allowed', () => {
+        const result = game.processBet(room, players, roundState, 'p1', 'call', null);
+        expect(result.success).toBe(false);
+        expect(result.error).toMatch(/must bet before you can call/i);
+        expect(players.find(p => p.id === 'p1').money_cents).toBe(game.GAME_CONSTANTS.STARTING_MONEY);
+        expect(roundState.finalized_json['p1']).toBeFalsy();
+    });
+
     it('call matches only the difference to the table-high bet', () => {
         game.processBet(room, players, roundState, 'p1', 'bet', 50000);
         room.turn_player_id = 'p2';

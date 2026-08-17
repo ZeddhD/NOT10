@@ -515,9 +515,10 @@ function updateGameUI() {
             if (tableHighestEl) tableHighestEl.textContent = `Table: ${utils.formatMoney(tableHighest)}`;
             if (yourBetEl) yourBetEl.textContent = `You: ${utils.formatMoney(yourBet)}`;
             if (callAmountEl) callAmountEl.textContent = `To Call: ${utils.formatMoney(callAmount)}`;
-            // CALL with nothing owed is really a check - say so, don't
-            // leave the button claiming an amount that isn't there.
-            if (callBtn) callBtn.textContent = callAmount > 0 ? `CALL ${utils.formatMoney(callAmount)}` : 'CHECK';
+            // There's no check option - every round needs a real bet, so
+            // CALL only ever shows (and enables, see ui.updateBettingButtons)
+            // once there's an actual amount to match.
+            if (callBtn) callBtn.textContent = callAmount > 0 ? `CALL ${utils.formatMoney(callAmount)}` : 'CALL';
         }
         
         if (isMyTurn && appState.roundState) {

@@ -132,9 +132,15 @@ describe('game.processBet', () => {
     let room, players, roundState;
 
     beforeEach(() => {
-        room = makeRoom({ phase: 'betting', pot_cents: 0 });
+        room = makeRoom({ phase: 'betting', pot_cents: 0, turn_player_id: 'p1' });
         players = [makePlayer('p1'), makePlayer('p2')];
         roundState = makeRoundState();
+    });
+
+    it('rejects a bet/call/finalize from a player when it is not their turn', () => {
+        const result = game.processBet(room, players, roundState, 'p2', 'bet', 10000);
+        expect(result.success).toBe(false);
+        expect(result.error).toMatch(/not your turn/i);
     });
 
     it('rejects finalize before any bet action', () => {
@@ -160,7 +166,9 @@ describe('game.processBet', () => {
 
     it('rejects finalize below the $100 minimum unless the player is broke', () => {
         game.processBet(room, players, roundState, 'p1', 'bet', 10000);
+        room.turn_player_id = 'p2';
         game.processBet(room, players, roundState, 'p2', 'bet', 10000);
+        room.turn_player_id = 'p1';
         const result = game.processBet(room, players, roundState, 'p1', 'finalize', null);
         expect(result.success).toBe(true); // $100 bet satisfies the minimum
     });
@@ -174,6 +182,7 @@ describe('game.processBet', () => {
 
     it('call matches only the difference to the table-high bet', () => {
         game.processBet(room, players, roundState, 'p1', 'bet', 50000);
+        room.turn_player_id = 'p2';
         const result = game.processBet(room, players, roundState, 'p2', 'call', null);
         expect(result.success).toBe(true);
         expect(result.amount).toBe(50000);
@@ -189,6 +198,7 @@ describe('game.processBet', () => {
 
     it('call auto-finalizes - there is no further action left to take', () => {
         game.processBet(room, players, roundState, 'p1', 'bet', 50000);
+        room.turn_player_id = 'p2';
         game.processBet(room, players, roundState, 'p2', 'call', null);
         expect(roundState.finalized_json['p2']).toBe(true);
     });

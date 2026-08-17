@@ -44,16 +44,42 @@ export class AIPlayer {
         const hasRaisedOnce = hasRaised[this.id] || false;
 
         const handStrength = this.evaluateHandStrength(gameState.tableTotal);
+        // Reads the table, not just its own hand: a call that's cheap
+        // relative to the pot is worth taking on a weaker hand than the
+        // same call would be against a small pot (classic pot odds), and
+        // fewer survivors means whoever's left splits a bigger relative
+        // share, worth leaning in for a bit more.
+        const callAmount = Math.max(0, highestBet - myBet);
+        const confidence = this.evaluateBetConfidence(
+            handStrength, gameState.potCents || 0, callAmount, gameState.activePlayerCount || 4
+        );
 
         switch (this.personality) {
             case AI_PERSONALITIES.CAUTIOUS:
-                return this.cautiousBetting(hasRaisedOnce, highestBet, myBet, handStrength);
+                return this.cautiousBetting(hasRaisedOnce, highestBet, myBet, confidence);
             case AI_PERSONALITIES.AGGRESSIVE:
-                return this.aggressiveBetting(hasRaisedOnce, highestBet, myBet, handStrength);
+                return this.aggressiveBetting(hasRaisedOnce, highestBet, myBet, confidence);
             case AI_PERSONALITIES.BALANCED:
             default:
-                return this.balancedBetting(hasRaisedOnce, highestBet, myBet, handStrength);
+                return this.balancedBetting(hasRaisedOnce, highestBet, myBet, confidence);
         }
+    }
+
+    /**
+     * Blend raw hand strength with pot odds and survivor count into a
+     * single 0-1 confidence score the betting personalities act on.
+     * @param {number} handStrength - 0-1, own-hand-only score
+     * @param {number} potCents - Current pot size
+     * @param {number} callAmount - Cost to match the table's highest bet
+     * @param {number} activePlayerCount - Players still active this round
+     * @returns {number} 0-1 confidence score
+     */
+    evaluateBetConfidence(handStrength, potCents, callAmount, activePlayerCount) {
+        // No cost to call (checking, or already at the table high) - pot
+        // odds don't apply, so lean on hand strength alone.
+        const potOdds = callAmount > 0 ? potCents / (potCents + callAmount) : 0.5;
+        const survivorFactor = Math.max(0, Math.min(0.15, (4 - activePlayerCount) * 0.05));
+        return Math.max(0, Math.min(1, handStrength * 0.65 + potOdds * 0.25 + survivorFactor));
     }
 
     cautiousBetting(hasRaised, highestBet, myBet, handStrength) {
@@ -262,7 +288,9 @@ export async function executeAIBet(ai, gameState, roundState) {
     }
 
     if (decision.action === 'call') {
-        const handStrength = ai.evaluateHandStrength(gameState.tableTotal);
+        const handStrength = ai.evaluateBetConfidence(
+            ai.evaluateHandStrength(gameState.tableTotal), gameState.potCents || 0, callAmount, gameState.activePlayerCount || 4
+        );
 
         // There is no fold in NOT10 - every active player must bet, call,
         // or go all-in. "Back out with a weak hand" is only a real option

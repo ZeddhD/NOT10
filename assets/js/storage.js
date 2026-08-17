@@ -7,7 +7,8 @@ const STORAGE_KEYS = {
     PLAYER_ID: 'not10_player_id',
     PLAYER_NAME: 'not10_player_name',
     ROOM_CODE: 'not10_room_code',
-    SESSION: 'not10_session'
+    SESSION: 'not10_session',
+    SOUND_MUTED: 'not10_sound_muted'
 };
 
 /**
@@ -124,21 +125,17 @@ export function hasActiveSession() {
 }
 
 /**
- * Get user preferences (stub for future expansion)
- * @returns {Object} User preferences
+ * Get the saved sound-muted preference
+ * @returns {boolean} Muted
  */
-export function getPreferences() {
-    return {
-        soundEnabled: true,
-        animationsEnabled: true
-    };
+export function getSoundMuted() {
+    return localStorage.getItem(STORAGE_KEYS.SOUND_MUTED) === 'true';
 }
 
 /**
- * Save user preferences (stub for future expansion)
- * @param {Object} prefs - Preferences object
+ * Save the sound-muted preference
+ * @param {boolean} muted
  */
-export function savePreferences(prefs) {
-    // Future implementation
-    console.log('Preferences saved:', prefs);
+export function saveSoundMuted(muted) {
+    localStorage.setItem(STORAGE_KEYS.SOUND_MUTED, muted ? 'true' : 'false');
 }

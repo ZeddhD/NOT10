@@ -535,7 +535,11 @@ export class RoomManager {
         aiInstance.money_cents = player.money_cents;
         aiInstance.hand = room.hands.get(player.id) || [];
 
-        const gameState = { tableTotal: room.room.table_total };
+        const gameState = {
+            tableTotal: room.room.table_total,
+            potCents: room.room.pot_cents,
+            activePlayerCount: room.players.filter(p => p.status === 'active').length
+        };
         const decision = await ai.executeAIBet(aiInstance, gameState, room.roundState);
 
         // Room state may have changed while we were "thinking" (e.g. the

@@ -855,7 +855,7 @@ h1, h2, h3, h4, h5, h6 {
     border-right: 8px solid transparent;
     border-bottom: 14px solid var(--color-accent);
     filter: drop-shadow(1px 1px 0 var(--color-ink));
-    transform-origin: 50% calc(clamp(90px, 21cqw, 130px) + 3px);
+    transform-origin: 50% calc(clamp(90px, 21cqw, 130px) + 14px);
     transform: translateX(-50%) rotate(0deg);
     transition: transform var(--transition-impact);
 }

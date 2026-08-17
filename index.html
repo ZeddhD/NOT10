@@ -114,14 +114,9 @@
         <!-- Game Screen -->
         <div id="game-screen" class="screen hidden">
             <div class="game-layout">
-                <!-- Game Header - just the round number now; pot moved to its
-                     own banner above the table (see .table-banner below),
-                     Leave lives in the fixed top-right corner cluster. -->
-                <div class="game-header">
-                    <div class="header-left">
-                        <span id="round-number">Round 1</span>
-                    </div>
-                </div>
+                <!-- Fixed top-right corner cluster: round counter, Leave, sound toggle.
+                     Pot moved to its own banner above the table (see .table-banner below). -->
+                <span id="round-number" class="corner-action corner-round">Round 1</span>
                 <button id="leave-game-btn" class="corner-action btn-danger">Leave</button>
 
                 <!-- Table Area -->

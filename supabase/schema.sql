@@ -54,9 +54,23 @@ CREATE TABLE IF NOT EXISTS round_state (
     eliminated_player_id TEXT,
     bets_json JSONB DEFAULT '{}', -- {player_id: bet_amount}
     has_raised_json JSONB DEFAULT '{}', -- {player_id: boolean}
+    finalized_json JSONB DEFAULT '{}', -- {player_id: boolean} - has this player locked in their bet
+    bet_action_count_json JSONB DEFAULT '{}', -- {player_id: number} - bet/call/all-in actions taken this betting phase
+    highest_bettor_id TEXT, -- player who bet the most this betting phase (gets to choose play position)
+    highest_bet INTEGER DEFAULT 0,
+    awaiting_position_choice BOOLEAN DEFAULT FALSE,
     played_count INTEGER DEFAULT 0,
     log_json JSONB DEFAULT '[]' -- Array of log entries
 );
+
+-- Safe to re-run against a database that already has an older round_state
+-- table (CREATE TABLE IF NOT EXISTS above is a no-op in that case, so these
+-- catch anyone who ran an earlier version of this schema).
+ALTER TABLE round_state ADD COLUMN IF NOT EXISTS finalized_json JSONB DEFAULT '{}';
+ALTER TABLE round_state ADD COLUMN IF NOT EXISTS bet_action_count_json JSONB DEFAULT '{}';
+ALTER TABLE round_state ADD COLUMN IF NOT EXISTS highest_bettor_id TEXT;
+ALTER TABLE round_state ADD COLUMN IF NOT EXISTS highest_bet INTEGER DEFAULT 0;
+ALTER TABLE round_state ADD COLUMN IF NOT EXISTS awaiting_position_choice BOOLEAN DEFAULT FALSE;
 
 -- Index
 CREATE INDEX IF NOT EXISTS idx_round_state_room ON round_state(room_code);

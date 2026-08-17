@@ -38,7 +38,9 @@ const appState = {
     subscriptions: [],
     aiPlayers: [],
     aiLoopInterval: null,
-    botRunnerLock: null, // Lock for bot turn execution in multiplayer
+    botRunnerLock: null, // setInterval handle for the multiplayer bot runner
+    botTurnInProgress: false, // Re-entrancy guard for triggerBotTurn
+    botPositionChoiceInProgress: false, // Re-entrancy guard for maybeHandleBotPositionChoice
     multiplayerBotHands: {} // Cache bot hands for host: {botId: [cards]}
 };
 
@@ -201,6 +203,7 @@ async function handleCreateLobby() {
         await supabaseClient.createRoom(code, appState.currentUser.playerId);
         
         // Join as host
+        appState.mode = 'multiplayer';
         appState.roomCode = code;
         appState.isHost = true;
         storage.saveRoomCode(code);
@@ -302,6 +305,7 @@ async function handleJoinRoom() {
             money_cents: game.GAME_CONSTANTS.STARTING_MONEY
         });
         
+        appState.mode = 'multiplayer';
         appState.roomCode = code;
         appState.isHost = false;
         appState.currentUser.name = name;
@@ -1062,6 +1066,95 @@ async function startMultiplayerRound() {
     }
 }
 
+/**
+ * After any successful multiplayer bet action, either hand the turn to the
+ * next player who hasn't finalized, or - once everyone has - transition to
+ * the playing phase. Mirrors handleAIRaise/handleAICall/etc, but persisted
+ * so every client (not just the one who acted) sees the new turn_player_id.
+ *
+ * If the highest bettor needs to choose a position: a human player sees the
+ * prompt reactively (updateGameUI + handlePositionChoice already persist
+ * their choice); a bot's choice is handled separately by the host via
+ * maybeHandleBotPositionChoice, reacting to awaiting_position_choice rather
+ * than being driven from here - the client that completes betting isn't
+ * necessarily the host, and only the host is allowed to act for bots.
+ */
+async function advanceMultiplayerBetting(actingPlayerId) {
+    const activePlayers = appState.players.filter(p => p.status === 'active');
+
+    if (game.isBettingComplete(activePlayers, appState.roundState.bets_json, appState.roundState.finalized_json)) {
+        const transitionResult = game.transitionToPlaying(appState.room, activePlayers, appState.roundState);
+        await persistence.applyEffects(transitionResult.effects);
+    } else {
+        const actingPlayer = appState.players.find(p => p.id === actingPlayerId);
+        if (!actingPlayer) return;
+        const nextPlayer = game.getNextBettingPlayer(activePlayers, actingPlayer.seat_index, appState.roundState.finalized_json);
+        if (nextPlayer) {
+            await supabaseClient.updateRoom(appState.roomCode, { turn_player_id: nextPlayer.id });
+        }
+    }
+}
+
+/**
+ * Host-only: react to awaiting_position_choice being set for a bot. Wired
+ * into the room/round_state subscriptions so it fires regardless of which
+ * client actually completed the betting round.
+ */
+async function maybeHandleBotPositionChoice() {
+    if (!appState.isHost || !appState.roundState?.awaiting_position_choice) return;
+    if (appState.botPositionChoiceInProgress) return;
+
+    const bettor = appState.players.find(p => p.id === appState.roundState.highest_bettor_id);
+    if (!bettor || !bettor.is_bot) return; // human bettor - their own client handles it
+
+    appState.botPositionChoiceInProgress = true;
+    try {
+        ui.addLogEntry(`${bettor.name} is choosing position...`);
+        await utils.sleep(1000 + Math.random() * 1500);
+
+        // Re-check after the delay - another update may have already resolved this
+        if (!appState.roundState?.awaiting_position_choice) return;
+
+        const activePlayers = appState.players.filter(p => p.status === 'active');
+        const personality = extractBotPersonality(bettor.name);
+        const aiInstance = new ai.AIPlayer(bettor.id, bettor.name, personality, bettor.seat_index);
+        aiInstance.hand = appState.multiplayerBotHands[bettor.id] || [];
+        const choice = ai.choosePosition(aiInstance, appState.room.table_total || 0);
+
+        const posResult = game.applyPositionChoice(appState.room, activePlayers, appState.roundState, choice);
+        await persistence.applyEffects(posResult.effects);
+    } finally {
+        appState.botPositionChoiceInProgress = false;
+    }
+}
+
+/**
+ * Handles a bust in multiplayer: award the pot, check for a game winner,
+ * and either end the game or start the next round. Only ever runs on the
+ * single client whose own action caused the bust (the busted human, or the
+ * host if a bot busted) - never triggered reactively - so there's no risk
+ * of two clients double-applying it.
+ */
+async function handleMultiplayerBust(eliminatedPlayerId) {
+    await utils.sleep(1500);
+
+    const result = game.endRound(appState.room, appState.players, appState.roundState, eliminatedPlayerId);
+    await persistence.applyEffects(result.effects);
+
+    ui.addLogEntry('Round ended', 'highlight');
+
+    const winner = game.checkGameOver(appState.players);
+    if (winner) {
+        await supabaseClient.updateRoom(appState.roomCode, { status: 'finished' });
+        if (appState.isHost) stopMultiplayerBotRunner();
+        ui.showGameOver(winner, appState.players);
+        return;
+    }
+
+    await utils.sleep(2000);
+    await startMultiplayerRound();
+}
+
 async function handleMultiplayerRaise(amount) {
     try {
         const result = game.processBet(
@@ -1079,6 +1172,7 @@ async function handleMultiplayerRaise(amount) {
         }
 
         await persistence.applyEffects(result.effects);
+        await advanceMultiplayerBetting(appState.currentUser.playerId);
         // State will update via subscription
 
     } catch (error) {
@@ -1104,6 +1198,7 @@ async function handleMultiplayerCall() {
         }
 
         await persistence.applyEffects(result.effects);
+        await advanceMultiplayerBetting(appState.currentUser.playerId);
         // State will update via subscription
 
     } catch (error) {
@@ -1129,6 +1224,7 @@ async function handleMultiplayerAllIn() {
         }
 
         await persistence.applyEffects(result.effects);
+        await advanceMultiplayerBetting(appState.currentUser.playerId);
         // State will update via subscription
 
     } catch (error) {
@@ -1154,6 +1250,7 @@ async function handleMultiplayerFinalize() {
         }
 
         await persistence.applyEffects(result.effects);
+        await advanceMultiplayerBetting(appState.currentUser.playerId);
         // State will update via subscription
 
     } catch (error) {
@@ -1179,6 +1276,11 @@ async function handleMultiplayerCardClick(cardValue) {
 
         await persistence.applyEffects(result.effects);
         // State will update via subscription
+
+        if (result.bust) {
+            ui.addLogEntry(`You busted at ${result.total}!`, 'danger');
+            await handleMultiplayerBust(appState.currentUser.playerId);
+        }
 
     } catch (error) {
         console.error('Failed to play card:', error);
@@ -1248,20 +1350,32 @@ function stopMultiplayerBotRunner() {
 
 async function triggerBotTurn() {
     if (!appState.isHost || !appState.roundState || !appState.room) return;
-    
-    const phase = appState.roundState.phase;
-    const turnPlayerId = appState.roundState.turn_player_id;
-    
+
+    // Bot actions have a multi-second "thinking" delay, but triggerBotTurn
+    // is invoked both by a 1s interval and by every realtime subscription
+    // callback - without this guard the same bot's turn could be triggered
+    // and executed twice concurrently before the first persists.
+    if (appState.botTurnInProgress) return;
+
+    // phase and turn_player_id live on the room, not round_state
+    const phase = appState.room.phase;
+    const turnPlayerId = appState.room.turn_player_id;
+
     if (!turnPlayerId) return;
-    
+
     const turnPlayer = appState.players.find(p => p.id === turnPlayerId);
     if (!turnPlayer || !turnPlayer.is_bot) return; // Not a bot's turn
-    
-    // Execute bot action based on phase
-    if (phase === 'betting') {
-        await executeBotBettingTurn(turnPlayer);
-    } else if (phase === 'playing') {
-        await executeBotPlayingTurn(turnPlayer);
+
+    appState.botTurnInProgress = true;
+    try {
+        // Execute bot action based on phase
+        if (phase === 'betting') {
+            await executeBotBettingTurn(turnPlayer);
+        } else if (phase === 'playing') {
+            await executeBotPlayingTurn(turnPlayer);
+        }
+    } finally {
+        appState.botTurnInProgress = false;
     }
 }
 
@@ -1293,6 +1407,26 @@ async function executeBotBettingTurn(botPlayer) {
     }
 
     await persistence.applyEffects(result.effects);
+
+    // Bots must explicitly finalize, same as offline AI mode - betting can't
+    // complete (isBettingComplete) until every active player's finalized_json
+    // is true, and a bet/call/all-in alone doesn't set that.
+    if (decision.shouldFinalize && decision.action !== 'finalize') {
+        await utils.sleep(300);
+        const finalizeResult = game.processBet(
+            appState.room,
+            appState.players,
+            appState.roundState,
+            botPlayer.id,
+            'finalize',
+            null
+        );
+        if (finalizeResult.success) {
+            await persistence.applyEffects(finalizeResult.effects);
+        }
+    }
+
+    await advanceMultiplayerBetting(botPlayer.id);
 }
 
 async function executeBotPlayingTurn(botPlayer) {
@@ -1345,6 +1479,13 @@ async function executeBotPlayingTurn(botPlayer) {
     if (cardIndex > -1) {
         botHand.splice(cardIndex, 1);
     }
+
+    ui.addLogEntry(`${botPlayer.name} played ${chosenCard} (total: ${result.total})`);
+
+    if (result.bust) {
+        ui.addLogEntry(`${botPlayer.name} busted at ${result.total}!`, 'danger');
+        await handleMultiplayerBust(botPlayer.id);
+    }
 }
 
 function extractBotPersonality(botName) {
@@ -1373,22 +1514,34 @@ function subscribeToRoom() {
                 startMultiplayerBotRunner();
             }
         }
-        
-        // Trigger bot runner on room updates (phase/turn changes)
+
+        if (appState.room.status === 'finished') {
+            // Someone else's action ended the game - show it here too.
+            // showGameOver is idempotent (just re-renders text), so it's
+            // safe to call on every update while status stays 'finished'.
+            const winner = game.checkGameOver(appState.players);
+            if (winner) {
+                if (appState.isHost) stopMultiplayerBotRunner();
+                ui.showGameOver(winner, appState.players);
+            }
+        }
+
+        // Trigger bot runner / bot position choice on room updates (phase/turn changes)
         if (appState.isHost && appState.mode === 'multiplayer') {
             triggerBotTurn();
+            maybeHandleBotPositionChoice();
         }
-        
+
         updateGameUI();
     });
-    
+
     // Subscribe to players
     const playersSub = supabaseClient.subscribeToPlayers(appState.roomCode, async (payload) => {
         console.log('Players update:', payload);
         await loadRoomData();
         updateGameUI();
     });
-    
+
     // Subscribe to round state
     const roundSub = supabaseClient.subscribeToRoundState(appState.roomCode, async (payload) => {
         console.log('Round state update:', payload);
@@ -1396,6 +1549,7 @@ function subscribeToRoom() {
         if (appState.isHost) {
             await loadBotHands();
             triggerBotTurn();
+            maybeHandleBotPositionChoice();
         }
         updateGameUI();
     });
@@ -1442,31 +1596,43 @@ async function rejoinRoom(roomCode) {
             return;
         }
         
+        appState.mode = 'multiplayer';
         appState.roomCode = roomCode;
         await loadRoomData();
-        
+
         const myPlayer = appState.players.find(p => p.id === appState.currentUser.playerId);
         if (!myPlayer) {
             storage.clearRoomCode();
             ui.showScreen('menu-screen');
             return;
         }
-        
+
         appState.isHost = room.host_id === appState.currentUser.playerId;
-        
+
         subscribeToRoom();
-        
+
         if (room.status === 'lobby') {
             ui.showScreen(appState.isHost ? 'create-screen' : 'lobby-screen');
             ui.updateRoomCode(appState.isHost ? 'room-code-text' : 'lobby-room-code', roomCode);
         } else if (room.status === 'in_game') {
             await loadRoundState();
             await loadMyHand();
+            if (appState.isHost) {
+                await loadBotHands();
+                startMultiplayerBotRunner(); // resume bot control after a host page refresh
+            }
             ui.showScreen('game-screen');
             ui.initGameScreen();
             updateGameUI();
+        } else if (room.status === 'finished') {
+            const winner = game.checkGameOver(appState.players);
+            if (winner) {
+                ui.showGameOver(winner, appState.players);
+            } else {
+                ui.showScreen('menu-screen');
+            }
         }
-        
+
     } catch (error) {
         console.error('Failed to rejoin room:', error);
         storage.clearRoomCode();

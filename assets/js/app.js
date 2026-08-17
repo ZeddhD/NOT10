@@ -993,7 +993,9 @@ function updateGameUI() {
     // Update controls based on game state
     const myPlayer = appState.players.find(p => p.id === appState.currentUser.playerId);
     if (!myPlayer) return;
-    
+
+    ui.updateYourMoney(myPlayer.money_cents);
+
     const isMyTurn = appState.room.turn_player_id === appState.currentUser.playerId;
     const isSpectator = myPlayer.status === 'spectator';
     

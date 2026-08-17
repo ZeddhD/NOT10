@@ -229,7 +229,7 @@ export function updatePlayerBets(players, bets) {
         
         if (betEl && player) {
             const bet = bets[player.id] || 0;
-            betEl.textContent = `Bet: ${utils.formatMoney(bet)}`;
+            betEl.textContent = utils.formatMoney(bet);
         }
     }
 }
@@ -264,13 +264,13 @@ export function showPlayedCard(seatIndex, cardValue, isBust = false) {
     const playedCardEl = document.getElementById(`played-card-${seatIndex}`);
     if (playedCardEl) {
         playedCardEl.textContent = utils.getCardDisplay(cardValue);
-        playedCardEl.className = 'played-card-display visible';
-        playedCardEl.classList.add(`card-${cardValue}`);
-
-        // Auto-hide after 2 seconds
-        setTimeout(() => {
-            playedCardEl.classList.remove('visible');
-        }, 2000);
+        // Keep the static pos-N class (position on the table) - only clear
+        // the value/visibility classes so the deal-in animation can restart.
+        playedCardEl.classList.remove('card-0', 'card-1', 'card-2', 'card-3', 'visible');
+        void playedCardEl.offsetWidth; // restart animation if already visible
+        playedCardEl.classList.add(`card-${cardValue}`, 'visible');
+        // Stays on the table (not auto-hidden) - cleared only at round start
+        // via clearPlayedCards(), so the whole table's play is visible at a glance.
     }
 
     if (isBust) {
@@ -311,7 +311,7 @@ export function clearPlayedCards() {
     for (let i = 0; i < 4; i++) {
         const playedCardEl = document.getElementById(`played-card-${i}`);
         if (playedCardEl) {
-            playedCardEl.classList.remove('visible');
+            playedCardEl.classList.remove('visible', 'card-0', 'card-1', 'card-2', 'card-3');
         }
     }
 }
@@ -819,9 +819,11 @@ export function showEarningsBreakdown(players, currentPlayerId, potCents, bets) 
     
     const currentPlayerBet = bets[currentPlayerId] || 0;
     const opponents = activePlayers.filter(p => p.id !== currentPlayerId);
-    
-    container.innerHTML = '<h4>💰 Potential Earnings</h4>';
-    
+
+    container.innerHTML = '<h4>Potential Earnings by Scenario</h4>';
+
+    let bestEarnings = 0;
+
     opponents.forEach(opponent => {
         // Calculate earnings if this opponent is eliminated
         const survivors = activePlayers.filter(p => p.id !== opponent.id);
@@ -853,9 +855,34 @@ export function showEarningsBreakdown(players, currentPlayerId, potCents, bets) 
         itemDiv.appendChild(targetSpan);
         itemDiv.appendChild(amountSpan);
         container.appendChild(itemDiv);
+
+        if (earnings > bestEarnings) bestEarnings = earnings;
     });
-    
+
     container.classList.remove('hidden');
+    updateYourPotential(bestEarnings);
+}
+
+/**
+ * Update the always-visible "Your Money" stat chip.
+ * @param {number} moneyCents - Current player's bankroll in cents
+ */
+export function updateYourMoney(moneyCents) {
+    const el = document.getElementById('your-money-amount');
+    if (el) el.textContent = utils.formatMoney(moneyCents);
+}
+
+/**
+ * Update the always-visible "Best Potential Payout" stat chip.
+ * @param {number|null} amountCents - Best-case payout in cents, or null when
+ *                                    not in a phase where this is knowable
+ */
+export function updateYourPotential(amountCents) {
+    const el = document.getElementById('your-potential-amount');
+    if (!el) return;
+    el.textContent = (amountCents === null || amountCents === undefined)
+        ? '—'
+        : utils.formatMoney(amountCents);
 }
 
 /**
@@ -866,6 +893,7 @@ export function hideEarningsBreakdown() {
     if (container) {
         container.classList.add('hidden');
     }
+    updateYourPotential(null);
 }
 
 /**

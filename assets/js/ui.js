@@ -495,6 +495,44 @@ export function showPositionChoice(show, betAmount = 0) {
 }
 
 /**
+ * Show/hide the "Your Money" / "Best Potential Payout" stat chips - both
+ * are about a stake you no longer have once you're spectating, so they get
+ * hidden in favor of the live standings instead of sitting there at $0.
+ * @param {boolean} visible
+ */
+export function setYourStatsBarVisible(visible) {
+    document.getElementById('your-stats-bar')?.classList.toggle('hidden', !visible);
+}
+
+/**
+ * Render the live standings shown to a spectator in place of their own
+ * (no longer relevant) money/payout figures - who's still in, sorted by
+ * current stack, so there's something worth watching instead of blanks.
+ * @param {Array} players
+ * @param {string} currentPlayerId
+ */
+export function renderSpectatorStandings(players, currentPlayerId) {
+    const list = document.getElementById('spectator-standings-list');
+    if (!list) return;
+
+    list.innerHTML = '';
+    const sorted = [...players].sort((a, b) => b.money_cents - a.money_cents);
+
+    sorted.forEach((player, index) => {
+        const isYou = player.id === currentPlayerId;
+        const isOut = player.status === 'spectator';
+        const item = document.createElement('div');
+        item.className = `spectator-standing-item${isOut ? ' is-out' : ''}`;
+        item.innerHTML = `
+            <span class="spectator-standing-rank">#${index + 1}</span>
+            <span class="spectator-standing-name">${utils.sanitizeHTML(player.name)}${isYou ? ' (You)' : ''}</span>
+            <span class="spectator-standing-money">${isOut ? 'OUT' : utils.formatMoney(player.money_cents)}</span>
+        `;
+        list.appendChild(item);
+    });
+}
+
+/**
  * Show spectator notice
  * @param {boolean} show - Show or hide
  */

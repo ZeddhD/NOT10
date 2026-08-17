@@ -1308,6 +1308,10 @@ h1, h2, h3, h4, h5, h6 {
     flex-wrap: wrap;
 }
 
+.your-stats-bar.hidden {
+    display: none;
+}
+
 .stat-chip {
     flex: 1 1 180px;
     background: var(--color-bg-tertiary);
@@ -1601,6 +1605,84 @@ h1, h2, h3, h4, h5, h6 {
     align-items: center;
     justify-content: center;
     gap: var(--spacing-sm);
+}
+
+/* Live standings shown in place of a spectator's own (now irrelevant)
+   money/payout figures - reuses the same rank-badge language as the Game
+   Over standings so it reads as the same "who's winning" component. */
+.spectator-standings {
+    margin-top: var(--spacing-lg);
+}
+
+.spectator-standings h4 {
+    color: var(--color-text-secondary);
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: var(--spacing-md);
+    text-align: center;
+}
+
+.spectator-standings-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-sm);
+}
+
+.spectator-standing-item {
+    background: var(--color-bg-tertiary);
+    border: 2px solid transparent;
+    border-radius: var(--radius-md);
+    padding: var(--spacing-sm) var(--spacing-md);
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+}
+
+.spectator-standing-item.is-out {
+    opacity: 0.5;
+}
+
+.spectator-standing-rank {
+    flex-shrink: 0;
+    width: 1.6rem;
+    height: 1.6rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    font-family: var(--font-display);
+    font-weight: 900;
+    font-size: 0.75rem;
+    background: var(--color-bg-primary);
+    color: var(--color-text-dim);
+    border: 2px solid var(--color-text-dim);
+}
+
+.spectator-standing-item:first-child .spectator-standing-rank {
+    background: var(--color-accent);
+    color: var(--color-ink);
+    border-color: var(--color-ink);
+}
+
+.spectator-standing-name {
+    flex: 1;
+    color: var(--color-text-primary);
+    font-weight: 600;
+    text-align: left;
+    font-size: 0.9rem;
+}
+
+.spectator-standing-money {
+    color: var(--color-stakes);
+    font-weight: 800;
+    font-size: 0.9rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.spectator-standing-item.is-out .spectator-standing-money {
+    color: var(--color-text-dim);
+    font-weight: 700;
 }
 
 /* Position Choice Controls */

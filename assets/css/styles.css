@@ -777,7 +777,7 @@ h1, h2, h3, h4, h5, h6 {
        *different* element (.played-card-display), and a % value would
        resolve against that element's own tiny box, not this one, once
        substituted there. */
-    --chip-radius: clamp(150px, 36cqw, 210px);
+    --chip-radius: clamp(80px, 15cqw, 115px);
 }
 
 /* The felt - gives the table a distinct identity separate from the page

@@ -114,3 +114,13 @@ export function playWin() {
     ]);
     vibrate([20, 20, 20, 20, 60]);
 }
+
+// The game ended and it wasn't you - a plain, neutral descending tone.
+// Not harsh like a bust, not triumphant like playWin(), just enough that
+// the end-of-game moment isn't silent for everyone except the winner.
+export function playGameOver() {
+    tones([
+        { freq: 392, duration: 0.14, type: 'sine', gain: 0.12 },
+        { freq: 330, duration: 0.22, type: 'sine', gain: 0.12, delay: 0.12 }
+    ]);
+}

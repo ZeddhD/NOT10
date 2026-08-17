@@ -436,6 +436,7 @@ function handleStateUpdate(data) {
         const winner = data.winner || game.checkGameOver(appState.players);
         if (winner) {
             if (winner.id === appState.currentUser.playerId) sound.playWin();
+            else sound.playGameOver();
             ui.showGameOver(winner, appState.players);
         }
     }

@@ -749,32 +749,35 @@ h1, h2, h3, h4, h5, h6 {
 .game-table {
     grid-area: table;
     position: relative;
-    align-self: stretch;
+    align-self: center;
     justify-self: center;
-    /* Fill the grid row's actual height (a definite value, since the grid
-       container is height:100vh) and let aspect-ratio derive width from
-       that - then max-width caps it back down on wide columns, the same
-       "largest square that fits both axes" behavior as object-fit:contain,
-       so this never depends on guessing the header's pixel height. */
-    height: 100%;
-    width: auto;
-    max-width: min(100%, 640px);
+    /* Lets --chip-radius below use cqw (% of *this* element's own width)
+       instead of vw (% of the viewport) - the table is capped at
+       max-width:640px, so on an ultra-wide viewport a vw-based radius
+       would compute far larger than the table itself and push the chips
+       off it entirely. */
+    container-type: inline-size;
+    /* Width-driven on purpose, with height left to aspect-ratio: that's the
+       only combination that's *guaranteed* square in every browser. Mixing
+       height:100% with aspect-ratio and a max-width cap looked correct on
+       paper (the same "largest square that fits both axes" logic
+       object-fit:contain uses) but rendered as a stretched oval in
+       practice - not worth the risk over a slightly-approximate header
+       height guess here. */
+    width: min(100%, calc(100vh - 120px));
+    max-width: 640px;
     aspect-ratio: 1 / 1;
-    /* No vertical margin here on purpose - height:100% already refers to
-       the grid row's full size, so a vertical margin would push the box
-       taller than the row and overflow it. */
-    margin: 0;
+    margin: 0 auto;
     padding: 0;
     min-height: 0;
     min-width: 0;
-    /* How far a played card sits from the table's center - scales with
-       the table itself so cards always cluster around the total display
-       (see .played-card-display.pos-N below), never past its edge. Uses
-       vw rather than % on purpose: this variable is consumed inside a
-       transform on a *different* element (.played-card-display), and a
-       % value would resolve against that element's own tiny box, not
-       this one, once substituted there. */
-    --table-slot-offset: clamp(70px, 17vw, 105px);
+    /* Resting distance for a played card's small "chip" - near its
+       player's seat, not out in the open table. Uses vw rather than % on
+       purpose: this variable is consumed inside a transform on a
+       *different* element (.played-card-display), and a % value would
+       resolve against that element's own tiny box, not this one, once
+       substituted there. */
+    --chip-radius: clamp(150px, 36cqw, 210px);
 }
 
 /* The felt - gives the table a distinct identity separate from the page
@@ -810,8 +813,8 @@ h1, h2, h3, h4, h5, h6 {
     position: absolute;
     top: 50%;
     left: 50%;
-    width: clamp(180px, 42vw, 260px);
-    height: clamp(180px, 42vw, 260px);
+    width: clamp(180px, 42cqw, 260px);
+    height: clamp(180px, 42cqw, 260px);
     transform: translate(-50%, -50%);
     border-radius: 50%;
     border: 2px dashed rgba(255, 183, 3, 0.25);
@@ -828,7 +831,7 @@ h1, h2, h3, h4, h5, h6 {
     border-right: 8px solid transparent;
     border-bottom: 14px solid var(--color-accent);
     filter: drop-shadow(1px 1px 0 var(--color-ink));
-    transform-origin: 50% calc(clamp(90px, 21vw, 130px) + 3px);
+    transform-origin: 50% calc(clamp(90px, 21cqw, 130px) + 3px);
     transform: translateX(-50%) rotate(0deg);
     transition: transform var(--transition-impact);
 }
@@ -837,8 +840,8 @@ h1, h2, h3, h4, h5, h6 {
     background: var(--color-bg-secondary);
     border: var(--border-thicker) solid var(--color-accent);
     border-radius: var(--radius-lg);
-    width: clamp(110px, 22vw, 160px);
-    height: clamp(110px, 22vw, 160px);
+    width: clamp(110px, 22cqw, 160px);
+    height: clamp(110px, 22cqw, 160px);
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -858,7 +861,7 @@ h1, h2, h3, h4, h5, h6 {
 .total-value {
     font-family: var(--font-display);
     color: var(--color-accent);
-    font-size: clamp(2rem, 6vw, 3rem);
+    font-size: clamp(2rem, 6cqw, 3rem);
     font-weight: 900;
     line-height: 1;
     font-variant-numeric: tabular-nums;
@@ -896,20 +899,25 @@ h1, h2, h3, h4, h5, h6 {
     background: var(--color-bg-secondary);
     border: var(--border-thick) solid var(--color-bg-tertiary);
     border-radius: var(--radius-md);
-    padding: 8px clamp(8px, 2vw, 14px);
-    width: clamp(96px, 24vw, 170px);
+    padding: 8px clamp(8px, 2cqw, 14px);
+    width: clamp(96px, 24cqw, 170px);
     box-shadow: var(--shadow-md);
     transition: border-color var(--transition-normal), box-shadow var(--transition-normal);
 }
 
 /* Played cards live directly on the table (siblings of the player panels,
-   not nested inside them) so they can travel independently from the
-   player's seat to a fixed slot on the felt and stay there for the round -
-   this is the round's visible history, not a transient toast. */
+   not nested inside them). Each one plays a single animation: travel in
+   from its seat, flash up to roughly the total display's own size right
+   on top of it (the "merges into the count" moment - card and running
+   total read as one event), then shrink back down and settle as a small
+   chip near the player who played it. No reverse/exit animation on top of
+   that - the chip is cleared only at the next round via clearPlayedCards(). */
 .played-card-display {
     position: absolute;
-    width: clamp(34px, 7vw, 50px);
-    height: clamp(48px, 10vw, 70px);
+    top: 50%;
+    left: 50%;
+    width: clamp(20px, 4cqw, 28px);
+    height: clamp(28px, 5.5cqw, 38px);
     background: var(--color-bg-tertiary);
     border: var(--border-thick) solid var(--color-accent);
     border-radius: var(--radius-sm);
@@ -917,77 +925,60 @@ h1, h2, h3, h4, h5, h6 {
     align-items: center;
     justify-content: center;
     font-family: var(--font-display);
-    font-size: clamp(1.2rem, 3.5vw, 2rem);
+    font-size: clamp(0.75rem, 2cqw, 1rem);
     font-weight: 900;
     color: var(--color-accent);
     box-shadow: var(--shadow-md);
-    z-index: 5;
+    /* Above .table-center (z-index: 10) so the mid-animation flash reads
+       as landing on top of the total display, not behind it. */
+    z-index: 12;
 }
 
 .played-card-display.visible {
     display: flex;
 }
 
-/* Table slots hug the four sides of the center total display - this is
-   "the middle of the table where the count is happening", so played cards
-   read as a pile forming around the running total, not four separate
-   toasts scattered around the table. --table-slot-offset (set on
-   .game-table, inherited here) scales with the table itself. */
-.played-card-display.pos-2 {
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, calc(-50% - var(--table-slot-offset)));
+/* Resting chip position - close to its player's seat, not out at the
+   original wide "pile" radius. --chip-radius is set on .game-table so it
+   scales with the table itself. */
+.played-card-display.pos-2 { transform: translate(-50%, calc(-50% - var(--chip-radius))); }
+.played-card-display.pos-1 { transform: translate(calc(-50% + var(--chip-radius)), -50%); }
+.played-card-display.pos-0 { transform: translate(-50%, calc(-50% + var(--chip-radius))); }
+.played-card-display.pos-3 { transform: translate(calc(-50% - var(--chip-radius)), -50%); }
+
+.played-card-display.pos-2.visible { animation: flash-recede-top 1.6s cubic-bezier(0.22, 1, 0.36, 1); }
+.played-card-display.pos-1.visible { animation: flash-recede-right 1.6s cubic-bezier(0.22, 1, 0.36, 1); }
+.played-card-display.pos-0.visible { animation: flash-recede-bottom 1.6s cubic-bezier(0.22, 1, 0.36, 1); }
+.played-card-display.pos-3.visible { animation: flash-recede-left 1.6s cubic-bezier(0.22, 1, 0.36, 1); }
+
+/* Each keyframe set: seat -> center (flash, enlarged) -> hold -> shrink to
+   the resting chip position defined above. */
+@keyframes flash-recede-top {
+    0%   { transform: translate(-50%, calc(-50% - var(--chip-radius) - 70px)) scale(0.6); opacity: 0; }
+    30%  { transform: translate(-50%, -50%) scale(4.2); opacity: 1; }
+    55%  { transform: translate(-50%, -50%) scale(4.2); opacity: 1; }
+    100% { transform: translate(-50%, calc(-50% - var(--chip-radius))) scale(1); opacity: 1; }
 }
 
-.played-card-display.pos-1 {
-    top: 50%;
-    left: 50%;
-    transform: translate(calc(-50% + var(--table-slot-offset)), -50%);
+@keyframes flash-recede-bottom {
+    0%   { transform: translate(-50%, calc(-50% + var(--chip-radius) + 70px)) scale(0.6); opacity: 0; }
+    30%  { transform: translate(-50%, -50%) scale(4.2); opacity: 1; }
+    55%  { transform: translate(-50%, -50%) scale(4.2); opacity: 1; }
+    100% { transform: translate(-50%, calc(-50% + var(--chip-radius))) scale(1); opacity: 1; }
 }
 
-.played-card-display.pos-0 {
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, calc(-50% + var(--table-slot-offset)));
+@keyframes flash-recede-right {
+    0%   { transform: translate(calc(-50% + var(--chip-radius) + 70px), -50%) scale(0.6); opacity: 0; }
+    30%  { transform: translate(-50%, -50%) scale(4.2); opacity: 1; }
+    55%  { transform: translate(-50%, -50%) scale(4.2); opacity: 1; }
+    100% { transform: translate(calc(-50% + var(--chip-radius)), -50%) scale(1); opacity: 1; }
 }
 
-.played-card-display.pos-3 {
-    top: 50%;
-    left: 50%;
-    transform: translate(calc(-50% - var(--table-slot-offset)), -50%);
-}
-
-/* Deal-in: the card visibly travels from its seat's direction toward the
-   center pile and settles there, then stays put (no reverse/exit
-   animation - it's cleared, not animated away, at the next round's
-   clearPlayedCards()). */
-.played-card-display.pos-2.visible { animation: deal-from-top var(--transition-impact); }
-.played-card-display.pos-1.visible { animation: deal-from-right var(--transition-impact); }
-.played-card-display.pos-0.visible { animation: deal-from-bottom var(--transition-impact); }
-.played-card-display.pos-3.visible { animation: deal-from-left var(--transition-impact); }
-
-@keyframes deal-from-top {
-    0% { transform: translate(-50%, calc(-50% - var(--table-slot-offset) - 90px)) scale(0.7) rotate(-8deg); opacity: 0; }
-    60% { opacity: 1; }
-    100% { transform: translate(-50%, calc(-50% - var(--table-slot-offset))) scale(1) rotate(0deg); opacity: 1; }
-}
-
-@keyframes deal-from-bottom {
-    0% { transform: translate(-50%, calc(-50% + var(--table-slot-offset) + 90px)) scale(0.7) rotate(8deg); opacity: 0; }
-    60% { opacity: 1; }
-    100% { transform: translate(-50%, calc(-50% + var(--table-slot-offset))) scale(1) rotate(0deg); opacity: 1; }
-}
-
-@keyframes deal-from-right {
-    0% { transform: translate(calc(-50% + var(--table-slot-offset) + 90px), -50%) scale(0.7) rotate(8deg); opacity: 0; }
-    60% { opacity: 1; }
-    100% { transform: translate(calc(-50% + var(--table-slot-offset)), -50%) scale(1) rotate(0deg); opacity: 1; }
-}
-
-@keyframes deal-from-left {
-    0% { transform: translate(calc(-50% - var(--table-slot-offset) - 90px), -50%) scale(0.7) rotate(-8deg); opacity: 0; }
-    60% { opacity: 1; }
-    100% { transform: translate(calc(-50% - var(--table-slot-offset)), -50%) scale(1) rotate(0deg); opacity: 1; }
+@keyframes flash-recede-left {
+    0%   { transform: translate(calc(-50% - var(--chip-radius) - 70px), -50%) scale(0.6); opacity: 0; }
+    30%  { transform: translate(-50%, -50%) scale(4.2); opacity: 1; }
+    55%  { transform: translate(-50%, -50%) scale(4.2); opacity: 1; }
+    100% { transform: translate(calc(-50% - var(--chip-radius)), -50%) scale(1); opacity: 1; }
 }
 
 /* Played card color coding by value - the fixed card legend */
@@ -1074,9 +1065,12 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 /* Player positions (4-player table layout) - percentage-based so this
-   never has to switch to a static list on small screens */
+   never has to switch to a static list on small screens. Same 0% inset on
+   all four sides now (top/bottom used to sit 2% further in than left/right,
+   which read as unbalanced - extra dead space above/below versus none on
+   the sides). */
 .player-panel.pos-0 {
-    bottom: 2%;
+    bottom: 0%;
     left: 50%;
     transform: translateX(-50%);
 }
@@ -1087,7 +1081,7 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .player-panel.pos-2 {
-    top: 2%;
+    top: 0%;
     left: 50%;
     transform: translateX(-50%);
 }
@@ -1106,7 +1100,7 @@ h1, h2, h3, h4, h5, h6 {
 .player-name {
     font-weight: 800;
     color: var(--color-text-primary);
-    font-size: clamp(0.7rem, 2vw, 0.85rem);
+    font-size: clamp(0.7rem, 2cqw, 0.85rem);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -1117,7 +1111,7 @@ h1, h2, h3, h4, h5, h6 {
    without relying on color alone to tell them apart (Design Rule 2/3). */
 .player-stats {
     display: flex;
-    gap: clamp(6px, 1.6vw, var(--spacing-md));
+    gap: clamp(6px, 1.6cqw, var(--spacing-md));
     margin-top: 1px;
 }
 
@@ -1138,14 +1132,14 @@ h1, h2, h3, h4, h5, h6 {
 .player-money {
     color: var(--color-success);
     font-weight: 800;
-    font-size: clamp(0.75rem, 2vw, 0.9rem);
+    font-size: clamp(0.75rem, 2cqw, 0.9rem);
     font-variant-numeric: tabular-nums;
 }
 
 .player-bet {
     color: var(--color-stakes);
     font-weight: 700;
-    font-size: clamp(0.7rem, 1.8vw, 0.875rem);
+    font-size: clamp(0.7rem, 1.8cqw, 0.875rem);
     font-variant-numeric: tabular-nums;
 }
 
@@ -1306,6 +1300,19 @@ h1, h2, h3, h4, h5, h6 {
 .bet-commit-group {
     padding-top: var(--spacing-md);
     border-top: 2px solid var(--color-bg-tertiary);
+}
+
+/* The sidebar is a narrow column, and these three-in-a-row buttons include
+   the longest label in the game ("FINALIZE") - the large standalone-button
+   padding/letter-spacing from .btn was overflowing its box instead of
+   shrinking to fit. Tighter, size-aware, and can break mid-word as a last
+   resort rather than ever spilling past the button/sidebar edge. */
+.betting-buttons .btn {
+    padding: var(--spacing-sm) var(--spacing-xs);
+    font-size: clamp(0.7rem, 2.6vw, 0.85rem);
+    letter-spacing: 0;
+    overflow-wrap: anywhere;
+    text-align: center;
 }
 
 .custom-bet-group {

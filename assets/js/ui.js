@@ -194,7 +194,7 @@ export function renderGameTable(players, currentPlayerId, turnPlayerId, finalize
                 } else if (hasFinalized) {
                     statusEl.innerHTML = '<span class="icon-check" aria-hidden="true"></span> Finalized';
                 } else if (isTurn) {
-                    statusEl.textContent = '▶ Your Turn';
+                    statusEl.textContent = isYou ? '▶ Your Turn' : '▶ Turn';
                 } else {
                     statusEl.textContent = '';
                 }

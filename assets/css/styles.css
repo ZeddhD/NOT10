@@ -1089,6 +1089,30 @@ h1, h2, h3, h4, h5, h6 {
     background: var(--color-bg-tertiary);
 }
 
+/* Leave sits right next to the sound toggle - a deliberate fixed corner
+   cluster, not a button that happened to land wherever the header's flex
+   wrap put it (which is what it looked like before: centered-ish, out of
+   place, different on every screen width). */
+.corner-action {
+    position: fixed;
+    top: var(--spacing-md);
+    right: 4.5rem;
+    z-index: 1001;
+    padding: 0.6rem 1rem;
+    font-size: 0.8rem;
+    border: var(--border-thick) solid var(--color-ink);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-sm);
+    cursor: pointer;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-weight: 800;
+}
+
+.corner-action:hover {
+    filter: brightness(1.1);
+}
+
 .sound-toggle.muted {
     color: var(--color-text-dim);
 }
@@ -1823,14 +1847,27 @@ h1, h2, h3, h4, h5, h6 {
         height: auto;
         width: min(94vw, 520px);
         max-width: none;
-        margin: var(--spacing-md) auto;
+        /* Top margin grew to reserve room for the phase indicator, moved
+           above the table below - the table itself is untouched. */
+        margin: 2.75rem auto var(--spacing-md);
     }
 
-    /* The one real problem: the BUSTED stamp's outward bleed (see the
-       base .bust-stamp rule) was reaching far enough right to land on
-       top of the phase indicator sitting in the table's corner. Pull the
-       stamp back so it stays over its own panel instead of past it -
-       everything else about this layout was fine as it was. */
+    /* The table's own corner is exactly where the top player's panel and
+       its BUSTED stamp also want to be, and now also the fixed sound
+       toggle - too much fighting for one spot. Moved to sit as its own
+       banner above the whole table (in the margin reserved on
+       .game-table above) instead, clear of everything. */
+    .phase-indicator {
+        top: -2.75rem;
+        right: auto;
+        left: 50%;
+        transform: translateX(-50%);
+    }
+
+    /* The one real overlap left inside the table itself: the BUSTED
+       stamp's outward bleed (see the base .bust-stamp rule) reached far
+       enough right to land on the panel/table edge. Pull it back so it
+       stays over its own panel. */
     .bust-stamp {
         top: -6px;
         right: -4px;

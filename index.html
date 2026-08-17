@@ -125,10 +125,12 @@
                             <span id="pot-amount" class="pot-amount">$0</span>
                         </div>
                     </div>
-                    <div class="header-right">
-                        <button id="leave-game-btn" class="btn-small btn-danger">Leave</button>
-                    </div>
+                    <!-- Empty on purpose - balances header-left so the pot
+                         stays centered; Leave itself now lives in the fixed
+                         top-right corner cluster alongside the sound toggle. -->
+                    <div class="header-right"></div>
                 </div>
+                <button id="leave-game-btn" class="corner-action btn-danger">Leave</button>
 
                 <!-- Table Area -->
                 <div class="game-table">

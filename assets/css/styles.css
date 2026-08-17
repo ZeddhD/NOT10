@@ -1,6 +1,39 @@
 /* ================================
    NOT10 - Styles
    Dark theme with neon cyan accents
+   ================================
+
+   DESIGN RULES (closed set - read before adding a new color or state)
+
+   Before adding any new UI element, ask "which rule below does this
+   follow?" If the honest answer is "none, it's just what looked right
+   here", that's the moment visual drift starts - extend one of these
+   rules instead of inventing a one-off.
+
+   1. Every color in the palette below means exactly ONE thing, and is
+      never borrowed for anything else - including decorative uses
+      (avatars, dividers, etc). Currently:
+        --color-accent / --color-accent-dim : brand + interactive/focus
+                                               (buttons, active borders,
+                                               links, headings)
+        --color-success                     : survived / won / finalized
+                                               / positive money change
+        --color-danger                      : busted / eliminated /
+                                               destructive action / error
+        --color-warning                     : pending / needs-your-action
+                                               / caution state
+      If a screen needs a new kind of meaning, add a new named variable
+      for it rather than repurposing one of these four.
+
+   2. Text you need to scan fast (bet amounts, turn indicators, log
+      entries) gets exactly ONE de-emphasis technique, never a stack of
+      them - e.g. dim OR small, not dim-and-small-and-italic together.
+
+   3. States that must be unmistakable under time pressure (e.g. "you are
+      eliminated" vs "it's your turn to act") get visually distinct
+      treatments on purpose, even though both are "important" - two
+      urgent-looking states that look alike defeats the point of either.
+
    ================================ */
 
 /* === CSS Variables === */

@@ -298,6 +298,20 @@ NOT10 was created to demonstrate **modern vanilla JavaScript** capabilities with
 - ES6 modules for clean code organization
 - Hash-based routing for screen navigation
 
+**🧩 Three-Layer Split**
+- `assets/js/game.js` is a **pure rules engine**: it takes plain state
+  objects and returns plain results, including an `effects` array
+  describing what *could* be persisted. It has no import of
+  `supabaseClient.js` and no knowledge that a network exists - which is
+  what makes `tests/game.test.js` able to run headlessly (see Testing,
+  below).
+- `assets/js/persistence.js` is the thin adapter: it turns `effects`
+  into actual Supabase calls. It's the only file that sits between the
+  rules and the network.
+- `assets/js/app.js` is the controller that wires rules + persistence +
+  `ui.js` (pure rendering) together for both offline/AI mode (rules only,
+  no persistence) and multiplayer (rules, then `persistence.applyEffects`).
+
 **🗄️ Database Design**
 ```sql
 rooms          -- Game lobbies
@@ -322,7 +336,9 @@ actions        -- Event log for game history
 ### Development Principles
 - ✅ **No frameworks** - Pure vanilla JavaScript
 - ✅ **No build tools** - No webpack, no bundlers
-- ✅ **No NPM dependencies** - Supabase loaded via CDN
+- ✅ **No runtime NPM dependencies** - Supabase loaded via CDN in the
+  browser. `vitest` is a dev-only dependency for `npm test`; nothing in
+  `index.html` imports from `node_modules`
 - ✅ **Progressive enhancement** - Works offline (AI mode) without backend
 - ✅ **Idempotent operations** - Safe reconnects and page refreshes
 
@@ -338,9 +354,6 @@ actions        -- Event log for game history
 **Want multiplayer?**
 - See [DEPLOYMENT.md](DEPLOYMENT.md) for step-by-step setup instructions
 
-**Want multiplayer?**
-- See [DEPLOYMENT.md](DEPLOYMENT.md) for step-by-step setup instructions
-
 ---
 
 ## 📁 Project Structure
@@ -350,26 +363,34 @@ NOT10/
 ├── index.html                 # Main HTML (all game screens)
 ├── README.md                  # This file - features & gameplay
 ├── DEPLOYMENT.md              # Step-by-step deployment guide
+├── package.json                # Dev-only: vitest for `npm test`
+├── vercel.json                 # Declarative Vercel deploy config
+├── netlify.toml                 # Declarative Netlify deploy config
 ├── .gitignore                 # Git ignore patterns
 │
 ├── assets/
 │   ├── css/
-│   │   └── styles.css         # Complete styling (1000+ lines)
+│   │   └── styles.css         # Complete styling + design rules (top comment)
 │   │
 │   └── js/
-│       ├── app.js             # Main controller & routing (1200+ lines)
-│       ├── ui.js              # UI rendering functions (650+ lines)
-│       ├── game.js            # Game logic & rules (550+ lines)
-│       ├── ai.js              # AI opponent logic (370+ lines)
-│       ├── supabaseClient.js  # Database operations (600+ lines)
-│       ├── storage.js         # LocalStorage utilities (100+ lines)
-│       ├── utils.js           # Helper functions (300+ lines)
+│       ├── app.js             # Main controller & routing
+│       ├── ui.js              # UI rendering functions (pure presentation)
+│       ├── game.js            # Pure rules engine (no network/DOM)
+│       ├── persistence.js     # Adapter: applies game.js effects to Supabase
+│       ├── ai.js              # AI opponent logic
+│       ├── supabaseClient.js  # Database operations
+│       ├── storage.js         # LocalStorage utilities
+│       ├── utils.js           # Helper functions
 │       ├── config.example.js  # Config template (copy to config.js)
 │       └── config.js          # Your Supabase credentials (gitignored)
 │
+├── tests/
+│   └── game.test.js           # Headless unit tests for game.js
+│
 └── supabase/
     ├── schema.sql             # Database table definitions
-    └── rls.sql                # Row-Level Security policies
+    ├── rls.sql                # Row-Level Security policies
+    └── cron.sql                # Scheduled cleanup of old rooms (pg_cron)
 ```
 
 ---
@@ -385,6 +406,16 @@ endRound()           // Award pot to winner, check game over
 getGameState()       // Get current state for AI/UI
 isBettingComplete()  // Check if all players have finalized
 transitionToPlaying()// Move from betting to playing phase
+```
+Every function above is pure and synchronous - it mutates the room/player
+objects it's given and returns `{ ...result, effects }`. It never touches
+Supabase directly.
+
+### Persistence Adapter (`persistence.js`)
+```javascript
+applyEffects(effects)  // Turns a game.js `effects` array into the matching
+                        // Supabase calls, in order. The only file that
+                        // bridges the rules engine and the network.
 ```
 
 ### AI System (`ai.js`)
@@ -433,6 +464,41 @@ showGameOver()       // Display winner & final standings
 ```
 
 ---
+
+## 🧪 Testing
+
+`assets/js/game.js` is a pure rules engine - no network, no storage, no
+DOM - so it has a headless unit test suite that runs in milliseconds with
+no browser and no Supabase project:
+
+```bash
+npm install   # installs vitest as a dev-only dependency; nothing ships
+              # to the browser, index.html never imports node_modules
+npm test
+```
+
+`tests/game.test.js` covers deck/shuffle integrity, every betting action
+(bet/call/all-in/finalize) including its failure paths, bust detection,
+weighted pot distribution and its rounding-remainder handling, game-over
+detection, and position-choice turn ordering.
+
+**What this does NOT verify** (the honest gap, updated as it changes):
+- Anything in `app.js`, `ui.js`, or `supabaseClient.js` - the routing,
+  rendering, realtime subscriptions, and reconnect flow are only
+  exercised by manually playing the game (see the Testing Checklist in
+  [DEPLOYMENT.md](DEPLOYMENT.md)).
+- Multiplayer concurrency/timing - e.g. whether the host's bot runner and
+  a real player's action can race on the same `round_state` row. This
+  needs a live, scripted check against a running Supabase project, not a
+  unit test, and doesn't currently exist.
+- The `hand_cards` RLS policy's actual behavior against a real Supabase
+  project (auth.uid() matching, bot-row exception) - the SQL is reviewed
+  but not exercised by an automated test.
+
+A clean `npm test` run means the rules are correct in isolation, not that
+the whole game works end to end - see the Testing Checklist in
+DEPLOYMENT.md for the closest thing to an integration check this project
+has.
 
 ## 🐛 Troubleshooting
 

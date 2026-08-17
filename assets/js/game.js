@@ -1,10 +1,16 @@
 /**
  * Game logic for NOT10
- * Implements all game rules, betting, and card playing mechanics
+ * Pure rules engine: no network, no storage, no DOM. Every exported function
+ * takes plain state objects and returns a plain result, including an
+ * `effects` array describing what a caller *may* want to persist.
+ *
+ * This module must never import supabaseClient (or anything else that
+ * touches the network/DOM) - see assets/js/persistence.js for the adapter
+ * that applies `effects` against Supabase, and tests/game.test.js for the
+ * headless unit tests this separation makes possible.
  */
 
 import * as utils from './utils.js';
-import * as supabaseClient from './supabaseClient.js';
 
 // Game constants
 export const GAME_CONSTANTS = {
@@ -21,44 +27,42 @@ export const GAME_CONSTANTS = {
  * Start a new round
  * @param {Object} room - Room object
  * @param {Array} players - Array of player objects
- * @param {boolean} isOffline - Is offline AI mode
- * @returns {Object} Round initialization data
+ * @returns {Object} Round initialization data (mutates player/room objects in place, like the rest of this module)
  */
-export async function startNewRound(room, players, isOffline = false) {
+export function startNewRound(room, players) {
+    const effects = [];
     const activePlayers = players.filter(p => p.money_cents > 0 && p.status === 'active');
-    
+
     if (activePlayers.length < 2) {
         // Game over - only one player left with money
-        return { gameOver: true, winner: activePlayers[0] || players[0] };
+        return { gameOver: true, winner: activePlayers[0] || players[0], effects };
     }
-    
+
     // Update spectators (players with no money)
     for (const player of players) {
         if (player.money_cents <= 0 && player.status === 'active') {
-            if (!isOffline) {
-                await supabaseClient.updatePlayer(player.id, { status: 'spectator' });
-            }
+            effects.push({ type: 'updatePlayer', playerId: player.id, updates: { status: 'spectator' } });
             player.status = 'spectator';
         }
     }
-    
+
     const newRoundNo = room.current_round + 1;
-    
+
     // Determine cards per player based on active player count
-    const cardsPerPlayer = activePlayers.length >= 3 
-        ? GAME_CONSTANTS.CARDS_PER_PLAYER_4 
+    const cardsPerPlayer = activePlayers.length >= 3
+        ? GAME_CONSTANTS.CARDS_PER_PLAYER_4
         : GAME_CONSTANTS.CARDS_PER_PLAYER_2;
-    
+
     // Create and shuffle deck
     let deck = utils.createDeck();
     deck = utils.shuffleArray(deck);
-    
+
     // Deal cards to active players
     const hands = {};
     for (const player of activePlayers) {
         hands[player.id] = utils.dealCards(deck, cardsPerPlayer);
     }
-    
+
     // Reset round state
     const roundState = {
         round_no: newRoundNo,
@@ -75,39 +79,33 @@ export async function startNewRound(room, players, isOffline = false) {
             timestamp: utils.getTimestamp()
         }]
     };
-    
+
     // Determine starting player (rotate clockwise)
     const startingPlayerIndex = room.starting_player_index;
     const orderedPlayers = utils.getPlayersInTurnOrder(activePlayers, startingPlayerIndex);
     const currentTurnPlayer = orderedPlayers[0];
-    
-    if (!isOffline) {
-        // Save to database
-        await supabaseClient.initRoundState(room.code, newRoundNo, roundState);
-        
-        // Save hand cards (secure, per-player)
-        for (const player of activePlayers) {
-            await supabaseClient.saveHandCards(room.code, newRoundNo, player.id, hands[player.id]);
-        }
-        
-        // Update room
-        await supabaseClient.updateRoom(room.code, {
+
+    effects.push({ type: 'initRoundState', roomCode: room.code, roundNo: newRoundNo, roundState });
+    for (const player of activePlayers) {
+        effects.push({ type: 'saveHandCards', roomCode: room.code, roundNo: newRoundNo, playerId: player.id, cards: hands[player.id] });
+    }
+    effects.push({
+        type: 'updateRoom', roomCode: room.code, updates: {
             current_round: newRoundNo,
             table_total: 0,
             phase: 'betting',
             turn_player_id: currentTurnPlayer.id
-        });
-        
-        // Log action
-        await supabaseClient.logAction(room.code, 'system', 'round_start', { round: newRoundNo });
-    }
-    
+        }
+    });
+    effects.push({ type: 'logAction', roomCode: room.code, actorPlayerId: 'system', actionType: 'round_start', payload: { round: newRoundNo } });
+
     return {
         gameOver: false,
         round: newRoundNo,
         hands,
         startingPlayer: currentTurnPlayer,
-        activePlayers
+        activePlayers,
+        effects
     };
 }
 
@@ -117,52 +115,50 @@ export async function startNewRound(room, players, isOffline = false) {
  * @param {Array} players - Array of player objects
  * @param {Object} roundState - Round state object
  * @param {string} playerId - Player making bet
- * @param {string} action - 'raise' or 'call'
- * @param {number} raiseAmount - Amount to raise (in cents) if action is 'raise'
- * @param {boolean} isOffline - Is offline mode
+ * @param {string} action - 'bet' | 'call' | 'all-in' | 'finalize'
+ * @param {number} amount - Amount to bet (in cents) if action is 'bet'
  * @returns {Object} Bet result
  */
-export async function processBet(room, players, roundState, playerId, action, amount, isOffline = false) {
+export function processBet(room, players, roundState, playerId, action, amount) {
+    const effects = [];
     const player = players.find(p => p.id === playerId);
     if (!player || player.status !== 'active') {
-        return { success: false, error: 'Player not active' };
+        return { success: false, error: 'Player not active', effects };
     }
-    
+
     const bets = roundState.bets_json || {};
     const hasRaised = roundState.has_raised_json || {};
     const actionCount = roundState.bet_action_count_json || {};
     const finalized = roundState.finalized_json || {};
     const currentPlayerBet = bets[playerId] || 0;
-    
+
     // Get highest bet on table
     const tableHighestBet = Math.max(0, ...Object.values(bets));
-    
+
     if (action === 'finalize') {
         // FINALIZE: Lock in current bet and pass turn
         // Player must have acted at least once AND everyone else must have acted (one full round)
         const playerActions = actionCount[playerId] || 0;
         if (playerActions < 1) {
-            return { success: false, error: 'You must bet or call before finalizing.' };
+            return { success: false, error: 'You must bet or call before finalizing.', effects };
         }
-        
+
         // Check if all active players have acted at least once (one full betting round completed)
         const activePlayers = players.filter(p => p.status === 'active');
         const allPlayersActed = activePlayers.every(p => (actionCount[p.id] || 0) >= 1);
         if (!allPlayersActed) {
-            return { success: false, error: 'Cannot finalize until all players have bet at least once.' };
+            return { success: false, error: 'Cannot finalize until all players have bet at least once.', effects };
         }
-        
+
         // Minimum bet is $100 unless player has less money (all-in)
         if (currentPlayerBet < 10000 && player.money_cents > 0) {
-            return { success: false, error: 'Minimum bet is $100. Please bet or go all-in.' };
+            return { success: false, error: 'Minimum bet is $100. Please bet or go all-in.', effects };
         }
-        
+
         finalized[playerId] = true;
-        
-        if (!isOffline) {
-            await supabaseClient.updateRoundState(room.code, { finalized_json: finalized });
-        }
-        
+
+        effects.push({ type: 'updateRoundState', roomCode: room.code, updates: { finalized_json: finalized } });
+
         roundState.finalized_json = finalized;
         roundState.log_json.push({
             type: 'finalize',
@@ -172,46 +168,44 @@ export async function processBet(room, players, roundState, playerId, action, am
             message: `${player.name} finalized bet at ${utils.formatMoney(currentPlayerBet)}`,
             timestamp: utils.getTimestamp()
         });
-        
-        return { success: true, action: 'finalize', amount: currentPlayerBet };
+
+        return { success: true, action: 'finalize', amount: currentPlayerBet, effects };
     }
-    
+
     if (action === 'bet') {
         // INCREMENTAL BETTING: Add amount to current committed bet
         // Validate amount is allowed
         if (!GAME_CONSTANTS.RAISE_AMOUNTS.includes(amount) && amount !== player.money_cents) {
-            return { success: false, error: 'Invalid bet amount' };
+            return { success: false, error: 'Invalid bet amount', effects };
         }
-        
+
         // Check if player can afford this additional amount
         if (player.money_cents < amount) {
-            return { success: false, error: 'Insufficient funds' };
+            return { success: false, error: 'Insufficient funds', effects };
         }
-        
+
         // Add to player's committed bet
         const newPlayerBet = currentPlayerBet + amount;
         bets[playerId] = newPlayerBet;
-        
+
         // Deduct from player money and add to pot
         player.money_cents -= amount;
         room.pot_cents += amount;
-        
+
         // Check if this is a RAISE (new bet > table highest)
         const isRaise = newPlayerBet > tableHighestBet;
         if (isRaise) {
             hasRaised[playerId] = true;
         }
-        
+
         // Increment bet action count
         actionCount[playerId] = (actionCount[playerId] || 0) + 1;
-        
-        if (!isOffline) {
-            await supabaseClient.updatePlayer(playerId, { money_cents: player.money_cents });
-            await supabaseClient.updateRoom(room.code, { pot_cents: room.pot_cents });
-            await supabaseClient.updateRoundState(room.code, { bets_json: bets, has_raised_json: hasRaised, bet_action_count_json: actionCount });
-            await supabaseClient.logAction(room.code, playerId, isRaise ? 'raise' : 'bet', { amount, newTotal: newPlayerBet });
-        }
-        
+
+        effects.push({ type: 'updatePlayer', playerId, updates: { money_cents: player.money_cents } });
+        effects.push({ type: 'updateRoom', roomCode: room.code, updates: { pot_cents: room.pot_cents } });
+        effects.push({ type: 'updateRoundState', roomCode: room.code, updates: { bets_json: bets, has_raised_json: hasRaised, bet_action_count_json: actionCount } });
+        effects.push({ type: 'logAction', roomCode: room.code, actorPlayerId: playerId, actionType: isRaise ? 'raise' : 'bet', payload: { amount, newTotal: newPlayerBet } });
+
         roundState.bets_json = bets;
         roundState.has_raised_json = hasRaised;
         roundState.bet_action_count_json = actionCount;
@@ -224,36 +218,34 @@ export async function processBet(room, players, roundState, playerId, action, am
             message: isRaise ? `${player.name} raised to $${newPlayerBet / 100}` : `${player.name} bet $${amount / 100}`,
             timestamp: utils.getTimestamp()
         });
-        
-        return { success: true, action: isRaise ? 'raise' : 'bet', amount, newTotal: newPlayerBet };
-        
+
+        return { success: true, action: isRaise ? 'raise' : 'bet', amount, newTotal: newPlayerBet, effects };
+
     } else if (action === 'call') {
         // CALL: Match highest bet by adding only the difference
         const callAmount = Math.max(0, tableHighestBet - currentPlayerBet);
-        
+
         if (callAmount > 0) {
             // If player can't afford full call, they can choose to go all-in or fold
             // For now, we'll allow partial call (all-in) only if explicitly chosen
             if (player.money_cents < callAmount) {
-                return { success: false, error: 'Insufficient funds to call - use ALL-IN instead' };
+                return { success: false, error: 'Insufficient funds to call - use ALL-IN instead', effects };
             }
-            
+
             player.money_cents -= callAmount;
             room.pot_cents += callAmount;
             bets[playerId] = tableHighestBet;
-            
-            if (!isOffline) {
-                await supabaseClient.updatePlayer(playerId, { money_cents: player.money_cents });
-                await supabaseClient.updateRoom(room.code, { pot_cents: room.pot_cents });
-                await supabaseClient.updateRoundState(room.code, { bets_json: bets });
-            }
-            
+
+            effects.push({ type: 'updatePlayer', playerId, updates: { money_cents: player.money_cents } });
+            effects.push({ type: 'updateRoom', roomCode: room.code, updates: { pot_cents: room.pot_cents } });
+            effects.push({ type: 'updateRoundState', roomCode: room.code, updates: { bets_json: bets } });
+
             roundState.bets_json = bets;
         }
-        
+
         // Increment bet action count
         actionCount[playerId] = (actionCount[playerId] || 0) + 1;
-        
+
         roundState.log_json.push({
             type: 'call',
             playerId,
@@ -262,45 +254,41 @@ export async function processBet(room, players, roundState, playerId, action, am
             message: callAmount > 0 ? `${player.name} called $${callAmount / 100}` : `${player.name} checked`,
             timestamp: utils.getTimestamp()
         });
-        
-        if (!isOffline) {
-            await supabaseClient.logAction(room.code, playerId, 'call', { amount: callAmount });
-            await supabaseClient.updateRoundState(room.code, { bet_action_count_json: actionCount });
-        }
-        
+
+        effects.push({ type: 'logAction', roomCode: room.code, actorPlayerId: playerId, actionType: 'call', payload: { amount: callAmount } });
+        effects.push({ type: 'updateRoundState', roomCode: room.code, updates: { bet_action_count_json: actionCount } });
+
         roundState.bet_action_count_json = actionCount;
-        
-        return { success: true, action: 'call', amount: callAmount };
+
+        return { success: true, action: 'call', amount: callAmount, effects };
     } else if (action === 'all-in') {
         // ALL-IN: Bet entire remaining balance
         const allInAmount = player.money_cents;
-        
+
         if (allInAmount === 0) {
-            return { success: false, error: 'No money to go all-in' };
+            return { success: false, error: 'No money to go all-in', effects };
         }
-        
+
         const newPlayerBet = currentPlayerBet + allInAmount;
         bets[playerId] = newPlayerBet;
-        
+
         player.money_cents = 0;
         room.pot_cents += allInAmount;
-        
+
         // Determine if this is a raise
         const isRaise = newPlayerBet > tableHighestBet;
         if (isRaise) {
             hasRaised[playerId] = true;
         }
-        
+
         // Increment bet action count
         actionCount[playerId] = (actionCount[playerId] || 0) + 1;
-        
-        if (!isOffline) {
-            await supabaseClient.updatePlayer(playerId, { money_cents: 0 });
-            await supabaseClient.updateRoom(room.code, { pot_cents: room.pot_cents });
-            await supabaseClient.updateRoundState(room.code, { bets_json: bets, has_raised_json: hasRaised, bet_action_count_json: actionCount });
-            await supabaseClient.logAction(room.code, playerId, 'all-in', { amount: allInAmount, newTotal: newPlayerBet });
-        }
-        
+
+        effects.push({ type: 'updatePlayer', playerId, updates: { money_cents: 0 } });
+        effects.push({ type: 'updateRoom', roomCode: room.code, updates: { pot_cents: room.pot_cents } });
+        effects.push({ type: 'updateRoundState', roomCode: room.code, updates: { bets_json: bets, has_raised_json: hasRaised, bet_action_count_json: actionCount } });
+        effects.push({ type: 'logAction', roomCode: room.code, actorPlayerId: playerId, actionType: 'all-in', payload: { amount: allInAmount, newTotal: newPlayerBet } });
+
         roundState.bets_json = bets;
         roundState.has_raised_json = hasRaised;
         roundState.bet_action_count_json = actionCount;
@@ -313,18 +301,18 @@ export async function processBet(room, players, roundState, playerId, action, am
             message: `${player.name} went ALL-IN $${allInAmount / 100}!`,
             timestamp: utils.getTimestamp()
         });
-        
-        return { success: true, action: 'all-in', amount: allInAmount, newTotal: newPlayerBet };
+
+        return { success: true, action: 'all-in', amount: allInAmount, newTotal: newPlayerBet, effects };
     }
-    
-    return { success: false, error: 'Invalid action' };
+
+    return { success: false, error: 'Invalid action', effects };
 }
 
 /**
  * Check if betting phase is complete
  * @param {Array} activePlayers - Active players
  * @param {Object} bets - Bets object
- * @param {Object} hasRaised - Has raised flags
+ * @param {Object} finalized - Finalized flags
  * @returns {boolean} Is betting complete
  */
 export function isBettingComplete(activePlayers, bets, finalized) {
@@ -342,19 +330,19 @@ export function isBettingComplete(activePlayers, bets, finalized) {
  * @param {Object} room - Room object
  * @param {Array} activePlayers - Active players
  * @param {Object} roundState - Round state with bets
- * @param {boolean} isOffline - Is offline mode
  * @returns {Object} Transition result with highest bettor info
  */
-export async function transitionToPlaying(room, activePlayers, roundState, isOffline = false) {
+export function transitionToPlaying(room, activePlayers, roundState) {
+    const effects = [];
     const bets = roundState.bets_json || {};
-    
+
     // Find player with highest bet (they get to choose position)
     // Use turn order to break ties - first player in turn order with highest bet wins
     const orderedPlayers = utils.getPlayersInTurnOrder(activePlayers, room.starting_player_index);
-    
+
     let highestBet = 0;
     let highestBettorId = null;
-    
+
     for (const player of orderedPlayers) {
         const playerBet = bets[player.id] || 0;
         if (playerBet > highestBet) {
@@ -362,35 +350,34 @@ export async function transitionToPlaying(room, activePlayers, roundState, isOff
             highestBettorId = player.id;
         }
     }
-    
+
     const highestBettor = activePlayers.find(p => p.id === highestBettorId);
-    
+
     // Store highest bettor info in round state for later choice
     if (highestBettorId && highestBet > 0) {
         roundState.highest_bettor_id = highestBettorId;
         roundState.highest_bet = highestBet;
         roundState.awaiting_position_choice = true;
     }
-    
-    if (!isOffline) {
-        await supabaseClient.updateRoom(room.code, {
-            phase: 'playing'
-        });
-        await supabaseClient.updateRoundState(room.code, { 
+
+    effects.push({ type: 'updateRoom', roomCode: room.code, updates: { phase: 'playing' } });
+    effects.push({
+        type: 'updateRoundState', roomCode: room.code, updates: {
             highest_bettor_id: highestBettorId,
             highest_bet: highestBet,
             awaiting_position_choice: true
-        });
-    }
-    
+        }
+    });
+
     room.phase = 'playing';
-    
+
     return {
         success: true,
         highestBettorId,
         highestBet,
         highestBettor,
-        needsPositionChoice: highestBettorId && highestBet > 0
+        needsPositionChoice: highestBettorId && highestBet > 0,
+        effects
     };
 }
 
@@ -400,23 +387,24 @@ export async function transitionToPlaying(room, activePlayers, roundState, isOff
  * @param {Array} activePlayers - Active players
  * @param {Object} roundState - Round state
  * @param {string} choice - 'first' or 'last'
- * @param {boolean} isOffline - Is offline mode
+ * @returns {Object} Result with new first player
  */
-export async function applyPositionChoice(room, activePlayers, roundState, choice, isOffline = false) {
+export function applyPositionChoice(room, activePlayers, roundState, choice) {
+    const effects = [];
     const highestBettorId = roundState.highest_bettor_id;
     const highestBet = roundState.highest_bet;
-    
+
     // Get ordered players starting from starting_player_index
     let orderedPlayers = utils.getPlayersInTurnOrder(activePlayers, room.starting_player_index);
-    
+
     const highestBettor = orderedPlayers.find(p => p.id === highestBettorId);
     const highestBettorIndex = orderedPlayers.findIndex(p => p.id === highestBettorId);
-    
+
     if (choice === 'last' && highestBettorIndex !== -1 && highestBettorIndex !== orderedPlayers.length - 1) {
         // Move highest bettor to last position
         orderedPlayers.splice(highestBettorIndex, 1);
         orderedPlayers.push(highestBettor);
-        
+
         roundState.log_json.push({
             type: 'play_order',
             playerId: highestBettorId,
@@ -428,7 +416,7 @@ export async function applyPositionChoice(room, activePlayers, roundState, choic
         // Move highest bettor to first position
         orderedPlayers.splice(highestBettorIndex, 1);
         orderedPlayers.unshift(highestBettor);
-        
+
         roundState.log_json.push({
             type: 'play_order',
             playerId: highestBettorId,
@@ -446,27 +434,26 @@ export async function applyPositionChoice(room, activePlayers, roundState, choic
             timestamp: utils.getTimestamp()
         });
     }
-    
+
     const firstPlayer = orderedPlayers[0];
-    
+
     // Clear awaiting choice flag
     roundState.awaiting_position_choice = false;
-    
-    if (!isOffline) {
-        await supabaseClient.updateRoom(room.code, {
-            turn_player_id: firstPlayer.id
-        });
-        await supabaseClient.updateRoundState(room.code, { 
+
+    effects.push({ type: 'updateRoom', roomCode: room.code, updates: { turn_player_id: firstPlayer.id } });
+    effects.push({
+        type: 'updateRoundState', roomCode: room.code, updates: {
             log_json: roundState.log_json,
             awaiting_position_choice: false
-        });
-    }
-    
+        }
+    });
+
     room.turn_player_id = firstPlayer.id;
-    
+
     return {
         success: true,
-        firstPlayer
+        firstPlayer,
+        effects
     };
 }
 
@@ -477,29 +464,27 @@ export async function applyPositionChoice(room, activePlayers, roundState, choic
  * @param {Object} roundState - Round state object
  * @param {string} playerId - Player playing card
  * @param {number} cardValue - Card value to play
- * @param {boolean} isOffline - Is offline mode
  * @returns {Object} Play result
  */
-export async function processCardPlay(room, players, roundState, playerId, cardValue, isOffline = false) {
+export function processCardPlay(room, players, roundState, playerId, cardValue) {
+    const effects = [];
     const player = players.find(p => p.id === playerId);
     if (!player || player.status !== 'active') {
-        return { success: false, error: 'Player not active' };
+        return { success: false, error: 'Player not active', effects };
     }
-    
+
     // Verify it's player's turn
     if (room.turn_player_id !== playerId) {
-        return { success: false, error: 'Not your turn' };
+        return { success: false, error: 'Not your turn', effects };
     }
-    
+
     // Update table total
     const newTotal = room.table_total + cardValue;
     room.table_total = newTotal;
-    
+
     // Remove card from hand
-    if (!isOffline) {
-        await supabaseClient.removeCardFromHand(room.code, room.current_round, playerId, cardValue);
-    }
-    
+    effects.push({ type: 'removeCardFromHand', roomCode: room.code, roundNo: room.current_round, playerId, cardValue });
+
     // Log the play
     roundState.log_json.push({
         type: 'play_card',
@@ -510,46 +495,40 @@ export async function processCardPlay(room, players, roundState, playerId, cardV
         message: `${player.name} played ${cardValue} (total: ${newTotal})`,
         timestamp: utils.getTimestamp()
     });
-    
+
     roundState.played_count++;
-    
-    if (!isOffline) {
-        await supabaseClient.updateRoom(room.code, { table_total: newTotal });
-        await supabaseClient.updateRoundState(room.code, { 
-            played_count: roundState.played_count,
-            log_json: roundState.log_json
-        });
-        await supabaseClient.logAction(room.code, playerId, 'play_card', { cardValue, newTotal });
-    }
-    
+
+    effects.push({ type: 'updateRoom', roomCode: room.code, updates: { table_total: newTotal } });
+    effects.push({ type: 'updateRoundState', roomCode: room.code, updates: { played_count: roundState.played_count, log_json: roundState.log_json } });
+    effects.push({ type: 'logAction', roomCode: room.code, actorPlayerId: playerId, actionType: 'play_card', payload: { cardValue, newTotal } });
+
     // Check for bust
     if (newTotal >= GAME_CONSTANTS.BUST_THRESHOLD) {
         return {
             success: true,
             bust: true,
             eliminatedPlayer: player,
-            total: newTotal
+            total: newTotal,
+            effects
         };
     }
-    
+
     // Not bust - advance turn
     const activePlayers = players.filter(p => p.status === 'active');
     const nextPlayerIndex = utils.getNextPlayerIndex(player.seat_index, activePlayers);
     const nextPlayer = activePlayers.find(p => p.seat_index === nextPlayerIndex);
-    
-    if (!isOffline && nextPlayer) {
-        await supabaseClient.updateRoom(room.code, { turn_player_id: nextPlayer.id });
-    }
-    
+
     if (nextPlayer) {
+        effects.push({ type: 'updateRoom', roomCode: room.code, updates: { turn_player_id: nextPlayer.id } });
         room.turn_player_id = nextPlayer.id;
     }
-    
+
     return {
         success: true,
         bust: false,
         total: newTotal,
-        nextPlayer
+        nextPlayer,
+        effects
     };
 }
 
@@ -559,28 +538,28 @@ export async function processCardPlay(room, players, roundState, playerId, cardV
  * @param {Array} players - Array of player objects
  * @param {Object} roundState - Round state object
  * @param {string} eliminatedPlayerId - ID of eliminated player
- * @param {boolean} isOffline - Is offline mode
  * @returns {Object} Round end result
  */
-export async function endRound(room, players, roundState, eliminatedPlayerId, isOffline = false) {
+export function endRound(room, players, roundState, eliminatedPlayerId) {
+    const effects = [];
     const activePlayers = players.filter(p => p.status === 'active');
     const survivors = activePlayers.filter(p => p.id !== eliminatedPlayerId);
     const bets = roundState.bets_json || {};
-    
+
     // WEIGHTED POT DISTRIBUTION: Proportional to bet amount
     // Calculate total bets from survivors only
     const totalSurvivorBets = survivors.reduce((sum, survivor) => {
         return sum + (bets[survivor.id] || 0);
     }, 0);
-    
+
     const potDistributions = {};
     let totalDistributed = 0;
-    
+
     // Distribute pot proportionally to each survivor's bet
     for (let i = 0; i < survivors.length; i++) {
         const survivor = survivors[i];
         const survivorBet = bets[survivor.id] || 0;
-        
+
         // Calculate proportional share
         let share;
         if (totalSurvivorBets === 0) {
@@ -591,29 +570,27 @@ export async function endRound(room, players, roundState, eliminatedPlayerId, is
             const proportion = survivorBet / totalSurvivorBets;
             share = Math.floor(room.pot_cents * proportion);
         }
-        
+
         // Last survivor gets remainder to ensure full pot distribution
         if (i === survivors.length - 1) {
             share = room.pot_cents - totalDistributed;
         }
-        
+
         survivor.money_cents += share;
         potDistributions[survivor.id] = share;
         totalDistributed += share;
-        
-        if (!isOffline) {
-            await supabaseClient.updatePlayer(survivor.id, { money_cents: survivor.money_cents });
-        }
+
+        effects.push({ type: 'updatePlayer', playerId: survivor.id, updates: { money_cents: survivor.money_cents } });
     }
-    
+
     // Reset pot to 0 for next round
     const newPot = 0;
-    
+
     // Log round end with detailed distribution
-    const distributionDetails = survivors.map(s => 
+    const distributionDetails = survivors.map(s =>
         `${s.name}: bet ${utils.formatMoney(bets[s.id] || 0)} → won ${utils.formatMoney(potDistributions[s.id])}`
     ).join(', ');
-    
+
     roundState.log_json.push({
         type: 'round_end',
         eliminatedPlayerId,
@@ -622,32 +599,30 @@ export async function endRound(room, players, roundState, eliminatedPlayerId, is
         message: `Round ended. ${distributionDetails}`,
         timestamp: utils.getTimestamp()
     });
-    
+
     // Rotate starting player clockwise
     const nextStartingIndex = (room.starting_player_index + 1) % GAME_CONSTANTS.MAX_PLAYERS;
-    
-    if (!isOffline) {
-        await supabaseClient.updateRoundState(room.code, { 
-            eliminated_player_id: eliminatedPlayerId,
-            log_json: roundState.log_json
-        });
-        
-        await supabaseClient.updateRoom(room.code, {
+
+    effects.push({ type: 'updateRoundState', roomCode: room.code, updates: { eliminated_player_id: eliminatedPlayerId, log_json: roundState.log_json } });
+    effects.push({
+        type: 'updateRoom', roomCode: room.code, updates: {
             phase: 'round_end',
             pot_cents: newPot,
             starting_player_index: nextStartingIndex
-        });
-    }
-    
+        }
+    });
+
     room.phase = 'round_end';
     room.pot_cents = newPot;
     room.starting_player_index = nextStartingIndex;
-    
+
     return {
+        success: true,
         survivors,
-        potPerPlayer: perPlayer,
-        remainder,
-        nextStartingIndex
+        potDistributions,
+        totalDistributed,
+        nextStartingIndex,
+        effects
     };
 }
 
@@ -658,11 +633,11 @@ export async function endRound(room, players, roundState, eliminatedPlayerId, is
  */
 export function checkGameOver(players) {
     const playersWithMoney = players.filter(p => p.money_cents > 0);
-    
+
     if (playersWithMoney.length === 1) {
         return playersWithMoney[0];
     }
-    
+
     return null;
 }
 
@@ -676,7 +651,7 @@ export function checkGameOver(players) {
 export function getGameState(room, players, roundState) {
     const activePlayers = players.filter(p => p.status === 'active');
     const spectators = players.filter(p => p.status === 'spectator');
-    
+
     return {
         roomCode: room.code,
         round: room.current_round,
@@ -703,23 +678,23 @@ export function validateAction(room, playerId, actionType) {
     if (room.phase === 'lobby') {
         return { valid: false, error: 'Game not started' };
     }
-    
+
     if (room.phase === 'round_end') {
         return { valid: false, error: 'Round is ending' };
     }
-    
+
     if (actionType === 'play_card' && room.phase !== 'playing') {
         return { valid: false, error: 'Not in playing phase' };
     }
-    
+
     if (actionType === 'bet' && room.phase !== 'betting') {
         return { valid: false, error: 'Not in betting phase' };
     }
-    
+
     if ((actionType === 'play_card' || actionType === 'bet') && room.turn_player_id !== playerId) {
         return { valid: false, error: 'Not your turn' };
     }
-    
+
     return { valid: true, error: null };
 }
 
@@ -727,6 +702,7 @@ export function validateAction(room, playerId, actionType) {
  * Get next betting turn player
  * @param {Array} activePlayers - Active players
  * @param {number} currentSeatIndex - Current player seat index
+ * @param {Object} finalized_json - Finalized flags
  * @returns {Object|null} Next player or null
  */
 export function getNextBettingPlayer(activePlayers, currentSeatIndex, finalized_json = {}) {
@@ -734,19 +710,19 @@ export function getNextBettingPlayer(activePlayers, currentSeatIndex, finalized_
     const totalPlayers = activePlayers.length;
     let attempts = 0;
     let nextIndex = currentSeatIndex;
-    
+
     while (attempts < totalPlayers) {
         nextIndex = utils.getNextPlayerIndex(nextIndex, activePlayers);
         const nextPlayer = activePlayers.find(p => p.seat_index === nextIndex);
-        
+
         // Return player if they haven't finalized
         if (nextPlayer && !finalized_json[nextPlayer.id]) {
             return nextPlayer;
         }
-        
+
         attempts++;
     }
-    
+
     // All players have finalized
     return null;
 }
@@ -769,10 +745,9 @@ export function resetBettingPhase(roundState) {
 export function calculateWinProbability(hand, tableTotal) {
     // Simple heuristic: count safe cards vs risky cards
     const safeCards = hand.filter(card => tableTotal + card < GAME_CONSTANTS.BUST_THRESHOLD);
-    const riskyCards = hand.filter(card => tableTotal + card >= GAME_CONSTANTS.BUST_THRESHOLD);
-    
+
     if (hand.length === 0) return 0;
-    
+
     return safeCards.length / hand.length;
 }
 
@@ -784,15 +759,15 @@ export function calculateWinProbability(hand, tableTotal) {
  */
 export function getRecommendedCard(hand, tableTotal) {
     if (hand.length === 0) return null;
-    
+
     // Find safest card (highest value that doesn't bust)
     const safeCards = hand.filter(card => tableTotal + card < GAME_CONSTANTS.BUST_THRESHOLD);
-    
+
     if (safeCards.length > 0) {
         // Play highest safe card
         return Math.max(...safeCards);
     }
-    
+
     // All cards bust - play lowest value to minimize total
     return Math.min(...hand);
 }

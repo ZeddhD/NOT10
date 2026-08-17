@@ -69,6 +69,33 @@ Choose your path:
 10. Click **"Run"**
 11. ✅ You should see success messages
 
+### Step 3b: Schedule Cleanup (Optional but Recommended)
+
+1. Click **"New query"** again
+2. Open `supabase/cron.sql` from your NOT10 folder
+3. Copy ALL the content and paste into the SQL editor
+4. Click **"Run"**
+
+This schedules an hourly sweep that deletes finished rooms older than 24
+hours, so your `rooms`/`players`/`round_state`/`hand_cards` tables don't
+grow forever. Safe to skip for local testing; recommended before sharing
+a public URL.
+
+### Step 3.5: Enable Anonymous Sign-ins
+
+Hand cards are protected by a Row Level Security policy that checks
+`auth.uid()`, so every client needs a real (anonymous) auth session before
+it can read its own hand:
+
+1. In your Supabase dashboard, go to **Authentication** → **Providers**
+2. Enable **Anonymous Sign-ins**
+3. Save
+
+Without this step, `assets/js/supabaseClient.js` will log a warning and
+fall back to an unauthenticated local player id - the game still runs, but
+the hand_cards RLS policy will deny reads (players won't be able to see
+their own cards in multiplayer).
+
 ### Step 4: Get Your Credentials
 
 1. Click **"Settings"** in the sidebar (gear icon)
@@ -190,6 +217,16 @@ http-server
 
 ### Deployment Platform B: Vercel (Automatic Deployments)
 
+**Fastest path:** `vercel.json` is already committed to this repo, so you
+can skip the CLI prompts entirely - go to [vercel.com/new](https://vercel.com/new),
+click **"Import Project"**, pick this GitHub repo, and click **Deploy**.
+Vercel reads `vercel.json` and deploys it as a static site with no build
+step. Add your Supabase env vars (see Production Security below) in the
+project's **Settings → Environment Variables** before or after the first
+deploy.
+
+**CLI path (manual, if you prefer):**
+
 1. **Install Vercel CLI**
    ```bash
    npm install -g vercel
@@ -224,7 +261,15 @@ http-server
 
 ---
 
-### Deployment Platform C: Netlify (Drag & Drop)
+### Deployment Platform C: Netlify (Connect Repo or Drag & Drop)
+
+**Fastest path:** `netlify.toml` is already committed to this repo. Go to
+[app.netlify.com](https://app.netlify.com), **"Add new site" → "Import an
+existing project"**, pick this GitHub repo, and click **Deploy**. Netlify
+reads `netlify.toml` and deploys it as-is - no build settings to fill in
+by hand, and every push to `main` auto-deploys.
+
+**Drag & drop path (manual, if you prefer):**
 
 1. **Prepare deployment folder**
    - Make sure `config.js` exists with your credentials

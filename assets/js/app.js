@@ -7,6 +7,7 @@ import * as ui from './ui.js';
 import * as utils from './utils.js';
 import * as storage from './storage.js';
 import * as supabaseClient from './supabaseClient.js';
+import * as persistence from './persistence.js';
 import * as game from './game.js';
 import * as ai from './ai.js';
 
@@ -45,16 +46,26 @@ const appState = {
 async function init() {
     console.log('Initializing NOT10...');
     
-    // Get or create player ID
+    // Get or create player ID (used as-is for offline/AI mode)
     appState.currentUser.playerId = storage.getOrCreatePlayerId();
     appState.currentUser.name = storage.getPlayerName() || '';
-    
+
     // Try to initialize Supabase if configured
     let supabaseReady = false;
     try {
         if (config.supabaseUrl && config.supabaseUrl !== 'https://your-project.supabase.co') {
             await supabaseClient.initSupabase(config.supabaseUrl, config.supabaseAnonKey);
             supabaseReady = true;
+
+            // For multiplayer, the player id must be the authenticated identity,
+            // not a client-chosen one - hand_cards RLS trusts auth.uid(), so an
+            // unauthenticated/spoofed id here would just be denied on read.
+            const authUserId = await supabaseClient.getAuthUserId();
+            if (authUserId) {
+                appState.currentUser.playerId = authUserId;
+            } else {
+                console.warn('No authenticated session; falling back to local player id. Multiplayer hand security will not be enforced - see supabase/rls.sql.');
+            }
         }
     } catch (error) {
         console.error('Supabase initialization failed:', error);
@@ -474,13 +485,13 @@ async function startAIRound() {
     console.log('Sleep done, starting new round');
     
     // Start new round
-    const result = await game.startNewRound(appState.room, appState.players, true);
-    
+    const result = game.startNewRound(appState.room, appState.players);
+
     if (result.gameOver) {
         ui.showGameOver(result.winner, appState.players);
         return;
     }
-    
+
     // Clear played card displays
     ui.clearPlayedCards();
     
@@ -577,16 +588,15 @@ async function executeAIBetTurn(aiPlayer) {
     const gameState = game.getGameState(appState.room, appState.players, appState.roundState);
     const decision = await ai.executeAIBet(aiPlayer, gameState, appState.roundState);
     
-    const result = await game.processBet(
+    const result = game.processBet(
         appState.room,
         appState.players,
         appState.roundState,
         aiPlayer.id,
         decision.action === 'raise' ? 'bet' : decision.action,
-        decision.amount,
-        true
+        decision.amount
     );
-    
+
     if (result.success) {
         if (result.action === 'raise') {
             ui.addLogEntry(`${aiPlayer.name} raised to ${utils.formatMoney(result.newTotal)}`);
@@ -605,16 +615,15 @@ async function executeAIBetTurn(aiPlayer) {
         // AI decides whether to finalize based on strategy (only if not already finalized)
         if (decision.shouldFinalize && decision.action !== 'finalize') {
             await utils.sleep(300);
-            const finalizeResult = await game.processBet(
+            const finalizeResult = game.processBet(
                 appState.room,
                 appState.players,
                 appState.roundState,
                 aiPlayer.id,
                 'finalize',
-                null,
-                true
+                null
             );
-            
+
             if (finalizeResult.success) {
                 ui.addLogEntry(`${aiPlayer.name} finalized bet`);
                 updateGameUI();
@@ -624,7 +633,7 @@ async function executeAIBetTurn(aiPlayer) {
         // Check if betting is complete
         const activePlayers = appState.players.filter(p => p.status === 'active');
         if (game.isBettingComplete(activePlayers, appState.roundState.bets_json, appState.roundState.finalized_json)) {
-            const transitionResult = await game.transitionToPlaying(appState.room, activePlayers, appState.roundState, true);
+            const transitionResult = game.transitionToPlaying(appState.room, activePlayers, appState.roundState);
             
             if (transitionResult.needsPositionChoice) {
                 await handleAIPositionChoice(transitionResult);
@@ -658,13 +667,12 @@ async function executeAIPlayTurn(aiPlayer) {
         aiPlayer.id // Pass AI player ID to show playing-card indicator
     );
     
-    const result = await game.processCardPlay(
+    const result = game.processCardPlay(
         appState.room,
         appState.players,
         appState.roundState,
         aiPlayer.id,
-        cardToPlay,
-        true
+        cardToPlay
     );
     
     if (result.success) {
@@ -683,7 +691,7 @@ async function executeAIPlayTurn(aiPlayer) {
 async function handleAIRoundEnd(eliminatedPlayerId) {
     await utils.sleep(1500);
     
-    await game.endRound(appState.room, appState.players, appState.roundState, eliminatedPlayerId, true);
+    game.endRound(appState.room, appState.players, appState.roundState, eliminatedPlayerId);
     
     ui.addLogEntry('Round ended', 'highlight');
     updateGameUI();
@@ -714,8 +722,8 @@ async function handleAIPositionChoice(transitionResult) {
         
         // Apply choice
         const activePlayers = appState.players.filter(p => p.status === 'active');
-        await game.applyPositionChoice(appState.room, activePlayers, appState.roundState, choice, true);
-        
+        game.applyPositionChoice(appState.room, activePlayers, appState.roundState, choice);
+
         updateGameUI();
         ui.addLogEntry('Playing phase started', 'highlight');
     }
@@ -724,13 +732,14 @@ async function handleAIPositionChoice(transitionResult) {
 // Handle human player position choice
 async function handlePositionChoice(choice) {
     const activePlayers = appState.players.filter(p => p.status === 'active');
-    
+
     if (appState.mode === 'ai') {
-        await game.applyPositionChoice(appState.room, activePlayers, appState.roundState, choice, true);
+        game.applyPositionChoice(appState.room, activePlayers, appState.roundState, choice);
     } else {
-        await game.applyPositionChoice(appState.room, activePlayers, appState.roundState, choice, false);
+        const result = game.applyPositionChoice(appState.room, activePlayers, appState.roundState, choice);
+        await persistence.applyEffects(result.effects);
     }
-    
+
     updateGameUI();
     ui.addLogEntry('Playing phase started', 'highlight');
 }
@@ -756,14 +765,13 @@ async function handleCall() {
 }
 
 async function handleAIRaise(amount) {
-    const result = await game.processBet(
+    const result = game.processBet(
         appState.room,
         appState.players,
         appState.roundState,
         appState.currentUser.playerId,
         'bet',
-        amount,
-        true
+        amount
     );
     
     if (!result.success) {
@@ -777,7 +785,7 @@ async function handleAIRaise(amount) {
     // Check if betting is complete
     const activePlayers = appState.players.filter(p => p.status === 'active');
     if (game.isBettingComplete(activePlayers, appState.roundState.bets_json, appState.roundState.finalized_json)) {
-        const transitionResult = await game.transitionToPlaying(appState.room, activePlayers, appState.roundState, true);
+        const transitionResult = game.transitionToPlaying(appState.room, activePlayers, appState.roundState);
         
         if (transitionResult.needsPositionChoice) {
             if (transitionResult.highestBettorId === appState.currentUser.playerId) {
@@ -812,14 +820,13 @@ async function handleAllIn() {
 }
 
 async function handleAIAllIn() {
-    const result = await game.processBet(
+    const result = game.processBet(
         appState.room,
         appState.players,
         appState.roundState,
         appState.currentUser.playerId,
         'all-in',
-        null,
-        true
+        null
     );
     
     if (!result.success) {
@@ -833,7 +840,7 @@ async function handleAIAllIn() {
     // Check if betting is complete
     const activePlayers = appState.players.filter(p => p.status === 'active');
     if (game.isBettingComplete(activePlayers, appState.roundState.bets_json, appState.roundState.finalized_json)) {
-        const transitionResult = await game.transitionToPlaying(appState.room, activePlayers, appState.roundState, true);
+        const transitionResult = game.transitionToPlaying(appState.room, activePlayers, appState.roundState);
         
         if (transitionResult.needsPositionChoice) {
             if (transitionResult.highestBettorId === appState.currentUser.playerId) {
@@ -860,14 +867,13 @@ async function handleAIAllIn() {
 }
 
 async function handleAICall() {
-    const result = await game.processBet(
+    const result = game.processBet(
         appState.room,
         appState.players,
         appState.roundState,
         appState.currentUser.playerId,
         'call',
-        null,
-        true
+        null
     );
     
     if (!result.success) {
@@ -881,7 +887,7 @@ async function handleAICall() {
     // Check if betting is complete
     const activePlayers = appState.players.filter(p => p.status === 'active');
     if (game.isBettingComplete(activePlayers, appState.roundState.bets_json, appState.roundState.finalized_json)) {
-        const transitionResult = await game.transitionToPlaying(appState.room, activePlayers, appState.roundState, true);
+        const transitionResult = game.transitionToPlaying(appState.room, activePlayers, appState.roundState);
         
         if (transitionResult.needsPositionChoice) {
             if (transitionResult.highestBettorId === appState.currentUser.playerId) {
@@ -916,14 +922,13 @@ async function handleFinalize() {
 }
 
 async function handleAIFinalize() {
-    const result = await game.processBet(
+    const result = game.processBet(
         appState.room,
         appState.players,
         appState.roundState,
         appState.currentUser.playerId,
         'finalize',
-        null,
-        true
+        null
     );
     
     if (!result.success) {
@@ -937,7 +942,7 @@ async function handleAIFinalize() {
     // Check if betting is complete
     const activePlayers = appState.players.filter(p => p.status === 'active');
     if (game.isBettingComplete(activePlayers, appState.roundState.bets_json, appState.roundState.finalized_json)) {
-        const transitionResult = await game.transitionToPlaying(appState.room, activePlayers, appState.roundState, true);
+        const transitionResult = game.transitionToPlaying(appState.room, activePlayers, appState.roundState);
         
         if (transitionResult.needsPositionChoice) {
             if (transitionResult.highestBettorId === appState.currentUser.playerId) {
@@ -983,13 +988,12 @@ async function handleAICardClick(cardValue) {
         appState.currentUser.playerId // Show playing-card indicator for human player
     );
     
-    const result = await game.processCardPlay(
+    const result = game.processCardPlay(
         appState.room,
         appState.players,
         appState.roundState,
         appState.currentUser.playerId,
-        cardValue,
-        true
+        cardValue
     );
     
     if (!result.success) {
@@ -1026,13 +1030,14 @@ async function startMultiplayerRound() {
     await utils.sleep(500);
     
     try {
-        const result = await game.startNewRound(appState.room, appState.players, false);
-        
+        const result = game.startNewRound(appState.room, appState.players);
+        await persistence.applyEffects(result.effects);
+
         if (result.gameOver) {
             ui.showGameOver(result.winner, appState.players);
             return;
         }
-        
+
         // Reload room and round state
         await loadRoomData();
         await loadRoundState();
@@ -1059,23 +1064,23 @@ async function startMultiplayerRound() {
 
 async function handleMultiplayerRaise(amount) {
     try {
-        const result = await game.processBet(
+        const result = game.processBet(
             appState.room,
             appState.players,
             appState.roundState,
             appState.currentUser.playerId,
-            'raise',
-            amount,
-            false
+            'bet',
+            amount
         );
-        
+
         if (!result.success) {
             ui.showToast(result.error);
             return;
         }
-        
+
+        await persistence.applyEffects(result.effects);
         // State will update via subscription
-        
+
     } catch (error) {
         console.error('Failed to raise:', error);
         ui.showToast('Failed to raise');
@@ -1084,23 +1089,23 @@ async function handleMultiplayerRaise(amount) {
 
 async function handleMultiplayerCall() {
     try {
-        const result = await game.processBet(
+        const result = game.processBet(
             appState.room,
             appState.players,
             appState.roundState,
             appState.currentUser.playerId,
             'call',
-            null,
-            false
+            null
         );
-        
+
         if (!result.success) {
             ui.showToast(result.error);
             return;
         }
-        
+
+        await persistence.applyEffects(result.effects);
         // State will update via subscription
-        
+
     } catch (error) {
         console.error('Failed to call:', error);
         ui.showToast('Failed to call');
@@ -1109,23 +1114,23 @@ async function handleMultiplayerCall() {
 
 async function handleMultiplayerAllIn() {
     try {
-        const result = await game.processBet(
+        const result = game.processBet(
             appState.room,
             appState.players,
             appState.roundState,
             appState.currentUser.playerId,
             'all-in',
-            null,
-            false
+            null
         );
-        
+
         if (!result.success) {
             ui.showToast(result.error);
             return;
         }
-        
+
+        await persistence.applyEffects(result.effects);
         // State will update via subscription
-        
+
     } catch (error) {
         console.error('Failed to go all-in:', error);
         ui.showToast('Failed to go all-in');
@@ -1134,23 +1139,23 @@ async function handleMultiplayerAllIn() {
 
 async function handleMultiplayerFinalize() {
     try {
-        const result = await game.processBet(
+        const result = game.processBet(
             appState.room,
             appState.players,
             appState.roundState,
             appState.currentUser.playerId,
             'finalize',
-            null,
-            false
+            null
         );
-        
+
         if (!result.success) {
             ui.showToast(result.error);
             return;
         }
-        
+
+        await persistence.applyEffects(result.effects);
         // State will update via subscription
-        
+
     } catch (error) {
         console.error('Failed to finalize:', error);
         ui.showToast('Failed to finalize');
@@ -1159,22 +1164,22 @@ async function handleMultiplayerFinalize() {
 
 async function handleMultiplayerCardClick(cardValue) {
     try {
-        const result = await game.processCardPlay(
+        const result = game.processCardPlay(
             appState.room,
             appState.players,
             appState.roundState,
             appState.currentUser.playerId,
-            cardValue,
-            false
+            cardValue
         );
-        
+
         if (!result.success) {
             ui.showToast(result.error);
             return;
         }
-        
+
+        await persistence.applyEffects(result.effects);
         // State will update via subscription
-        
+
     } catch (error) {
         console.error('Failed to play card:', error);
         ui.showToast('Failed to play card');
@@ -1273,19 +1278,21 @@ async function executeBotBettingTurn(botPlayer) {
     const decision = await ai.executeAIBet(aiInstance, gameState, appState.roundState);
     
     // Submit action through game logic
-    const result = await game.processBet(
+    const result = game.processBet(
         appState.room,
         appState.players,
         appState.roundState,
         botPlayer.id,
-        decision.action,
-        decision.amount,
-        false // Not offline - this is multiplayer
+        decision.action === 'raise' ? 'bet' : decision.action,
+        decision.amount
     );
-    
+
     if (!result.success) {
         console.error('Bot betting failed:', result.error);
+        return;
     }
+
+    await persistence.applyEffects(result.effects);
 }
 
 async function executeBotPlayingTurn(botPlayer) {
@@ -1318,23 +1325,25 @@ async function executeBotPlayingTurn(botPlayer) {
     );
     
     // Submit card play through game logic
-    const result = await game.processCardPlay(
+    const result = game.processCardPlay(
         appState.room,
         appState.players,
         appState.roundState,
         botPlayer.id,
-        chosenCard,
-        false // Not offline - this is multiplayer
+        chosenCard
     );
-    
+
     if (!result.success) {
         console.error('Bot card play failed:', result.error);
-    } else {
-        // Remove card from cached hand
-        const cardIndex = botHand.indexOf(chosenCard);
-        if (cardIndex > -1) {
-            botHand.splice(cardIndex, 1);
-        }
+        return;
+    }
+
+    await persistence.applyEffects(result.effects);
+
+    // Remove card from cached hand
+    const cardIndex = botHand.indexOf(chosenCard);
+    if (cardIndex > -1) {
+        botHand.splice(cardIndex, 1);
     }
 }
 

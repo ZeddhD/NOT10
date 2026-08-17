@@ -84,14 +84,27 @@ CREATE POLICY "Anyone can update round state"
 -- HAND CARDS POLICIES (MOST IMPORTANT FOR ANTI-CHEAT)
 -- ==========================================
 
--- Players can ONLY read their own cards
--- This is the key anti-cheat measure
--- Exception: Room host can read bot cards to control them
-CREATE POLICY "Players can read own cards"
+-- Players can ONLY read their own cards, enforced server-side via auth.uid().
+-- This requires Supabase Anonymous Sign-ins to be enabled (Authentication >
+-- Providers > Anonymous Sign-ins) - the client signs in anonymously on load
+-- (see assets/js/supabaseClient.js::initSupabase) and uses that session's
+-- auth.uid() as its player id from then on, so a player genuinely cannot
+-- read another human player's hand, not just "the UI doesn't show it".
+--
+-- Bot hands have no auth identity of their own (bots aren't real sessions),
+-- so any authenticated player in the room can read bot hand_cards rows -
+-- this only exposes bot cards (never another human's), which is an
+-- acceptable, explicit exception rather than a blanket bypass.
+CREATE POLICY "Players can read own cards, anyone can read bot cards"
     ON hand_cards FOR SELECT
-    USING (true); -- In a production app with auth, use: auth.uid() = player_id
-    -- For this demo without auth, we rely on client-side filtering
-    -- Host reads bot cards via client-side logic (bots auto-filled in multiplayer)
+    USING (
+        auth.uid()::text = player_id
+        OR EXISTS (
+            SELECT 1 FROM players p
+            WHERE p.id = hand_cards.player_id
+            AND p.is_bot = true
+        )
+    );
 
 -- Anyone can insert hand cards (when dealing)
 CREATE POLICY "Anyone can insert hand cards"
@@ -129,17 +142,18 @@ CREATE POLICY "Anyone can create actions"
 -- NOTES ON SECURITY
 -- ==========================================
 
--- IMPORTANT: These policies are simplified for a demo app without authentication.
--- In a production environment with Supabase Auth, you should:
+-- IMPORTANT: Most of these policies are still simplified 'true' conditions
+-- for a demo app - only hand_cards SELECT (the actual anti-cheat surface,
+-- see above) is enforced via auth.uid(). Everything else below remains a
+-- known, documented limitation, not a hidden one. Remaining hardening:
 --
--- 1. Replace 'true' conditions with proper auth checks:
+-- 1. Replace remaining 'true' conditions with proper auth checks:
 --    - Use auth.uid() to check authenticated user
---    - Match player.id with auth.uid()
+--    - Match player.id with auth.uid() for players/rooms/round_state writes
 --    - Verify room membership before allowing operations
 --
--- 2. Strengthen hand_cards policies:
---    - Only allow reading cards where player_id = auth.uid()
---    - This prevents players from seeing opponents' hands
+-- 2. (Done) hand_cards SELECT is scoped to auth.uid() = player_id, with an
+--    explicit, narrow exception for bot rows (see policy above).
 --
 -- 3. Add turn validation:
 --    - Only allow actions when it's the player's turn

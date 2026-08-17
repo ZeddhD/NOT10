@@ -16,7 +16,7 @@ export async function initSupabase(url, anonKey) {
     try {
         // Import Supabase from CDN
         const { createClient } = await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm');
-        
+
         supabase = createClient(url, anonKey, {
             realtime: {
                 params: {
@@ -24,8 +24,23 @@ export async function initSupabase(url, anonKey) {
                 }
             }
         });
-        
+
         isInitialized = true;
+
+        // Establish a stable authenticated identity so hand_cards RLS can key
+        // off auth.uid() instead of trusting the client-supplied player id.
+        // Reuses any existing session on reload (same identity across refreshes,
+        // which also keeps reconnect working); only signs in fresh otherwise.
+        // Requires "Anonymous Sign-ins" enabled in the Supabase dashboard
+        // (Authentication > Providers) - see DEPLOYMENT.md.
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) {
+            const { error: signInError } = await supabase.auth.signInAnonymously();
+            if (signInError) {
+                console.error('Anonymous sign-in failed:', signInError);
+            }
+        }
+
         console.log('Supabase initialized successfully');
         return supabase;
     } catch (error) {
@@ -44,6 +59,17 @@ export function getSupabase() {
         return null;
     }
     return supabase;
+}
+
+/**
+ * Get the authenticated (anonymous) user id for the current session.
+ * This is the identity hand_cards RLS trusts - see supabase/rls.sql.
+ * @returns {Promise<string|null>} auth user id, or null if not signed in
+ */
+export async function getAuthUserId() {
+    if (!isInitialized) return null;
+    const { data: { session } } = await supabase.auth.getSession();
+    return session?.user?.id || null;
 }
 
 /**

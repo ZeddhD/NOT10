@@ -1,15 +1,15 @@
 /**
- * Headless unit tests for the pure rules engine (assets/js/game.js).
+ * Headless unit tests for the pure rules engine (engine/game.js).
  *
- * These run with no browser, no Supabase, no DOM - just plain function
+ * These run with no browser, no server, no network - just plain function
  * calls against plain objects, per the "pure logic core gets fast headless
  * tests" rule from the ship-flow playbook. See README's Testing section
  * for what is and isn't covered here.
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import * as game from '../assets/js/game.js';
-import * as utils from '../assets/js/utils.js';
+import * as game from '../engine/game.js';
+import * as utils from '../engine/utils.js';
 
 function makePlayer(id, overrides = {}) {
     return {
@@ -68,11 +68,12 @@ describe('utils: deck & shuffle', () => {
 });
 
 describe('game.js is a pure module', () => {
-    it('does not import supabaseClient (no network dependency)', async () => {
+    it('imports nothing beyond its own engine/utils.js sibling (no network/DOM dependency)', async () => {
         const src = await import('node:fs/promises').then(fs =>
-            fs.readFile(new URL('../assets/js/game.js', import.meta.url), 'utf8')
+            fs.readFile(new URL('../engine/game.js', import.meta.url), 'utf8')
         );
-        expect(src).not.toMatch(/^\s*import .*supabaseClient/m);
+        const imports = [...src.matchAll(/^\s*import .*from ['"](.+)['"]/gm)].map(m => m[1]);
+        expect(imports).toEqual(['./utils.js']);
     });
 });
 
@@ -110,22 +111,20 @@ describe('game.startNewRound', () => {
         expect(result.winner.id).toBe('p1');
     });
 
-    it('demotes broke active players to spectator and emits an effect for it', () => {
+    it('demotes broke active players to spectator', () => {
         players.push(makePlayer('p4', { seat_index: 3, money_cents: 0 }));
-        const result = game.startNewRound(room, players);
+        game.startNewRound(room, players);
         const broke = players.find(p => p.id === 'p4');
         expect(broke.status).toBe('spectator');
-        expect(result.effects).toContainEqual({
-            type: 'updatePlayer', playerId: 'p4', updates: { status: 'spectator' }
-        });
     });
 
-    it('returns a plain effects array describing what a caller should persist', () => {
+    it('mutates room in place (phase/turn/round) and returns a fresh round state', () => {
         const result = game.startNewRound(room, players);
-        expect(Array.isArray(result.effects)).toBe(true);
-        expect(result.effects.some(e => e.type === 'initRoundState')).toBe(true);
-        expect(result.effects.filter(e => e.type === 'saveHandCards')).toHaveLength(3);
-        expect(result.effects.some(e => e.type === 'updateRoom')).toBe(true);
+        expect(room.phase).toBe('betting');
+        expect(room.current_round).toBe(1);
+        expect(room.turn_player_id).toBe(result.startingPlayer.id);
+        expect(result.roundState.round_no).toBe(1);
+        expect(result.roundState.log_json).toHaveLength(1);
     });
 });
 
@@ -195,12 +194,6 @@ describe('game.processBet', () => {
         expect(result.success).toBe(false);
     });
 
-    it('every branch returns an effects array, even on failure', () => {
-        const failure = game.processBet(room, players, roundState, 'p1', 'finalize', null);
-        expect(Array.isArray(failure.effects)).toBe(true);
-        const success = game.processBet(room, players, roundState, 'p1', 'bet', 10000);
-        expect(success.effects.length).toBeGreaterThan(0);
-    });
 });
 
 describe('game.processCardPlay', () => {
@@ -353,8 +346,8 @@ describe('game.transitionToPlaying + game.applyPositionChoice', () => {
 describe('game.isBettingComplete / game.getNextBettingPlayer', () => {
     it('is not complete until every active player has finalized', () => {
         const players = [makePlayer('a'), makePlayer('b')];
-        expect(game.isBettingComplete(players, {}, { a: true })).toBe(false);
-        expect(game.isBettingComplete(players, {}, { a: true, b: true })).toBe(true);
+        expect(game.isBettingComplete(players, { a: true })).toBe(false);
+        expect(game.isBettingComplete(players, { a: true, b: true })).toBe(true);
     });
 
     it('skips already-finalized players when finding the next to act', () => {

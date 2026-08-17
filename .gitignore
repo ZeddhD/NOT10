@@ -1,9 +1,6 @@
 # NOT10 .gitignore
 
-# Configuration file with credentials
-assets/js/config.js
-
-# Node modules (if you add any build tools later)
+# Node modules
 node_modules/
 
 # OS files

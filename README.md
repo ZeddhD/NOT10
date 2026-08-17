@@ -2,7 +2,11 @@
 
 > **A strategic card game where survival beats ambition. Don't be the one to hit 10!**
 
-NOT10 is a fast-paced multiplayer card and betting game built entirely with vanilla JavaScript, featuring real-time synchronization, AI opponents, and an elegant dark-themed interface. Created as a demonstration of modern web development without frameworks or build tools.
+NOT10 is a fast-paced multiplayer card and betting game with AI opponents
+and an elegant dark-themed interface. The frontend is vanilla HTML/CSS/JS
+(no framework, no build step); multiplayer runs on a small self-contained
+Node.js WebSocket server with no external database - deploy it and play,
+nothing else to configure.
 
 ---
 
@@ -31,13 +35,15 @@ NOT10 is a 2-4 player card game that combines poker-style betting with strategic
 ## ✨ Key Features
 
 ### 🌐 Multiplayer Mode
-- **Private Lobbies**: Create unique 4-character room codes to play with friends
-- **Real-Time Sync**: Powered by Supabase Realtime for instant game state updates
-- **Smart Bot Fill**: When starting with 2-3 humans, AI bots automatically fill remaining seats
-- **Reconnect Support**: Browser refresh/reload automatically rejoins your game
+- **Private Lobbies**: Create unique 6-character room codes to play with friends
+- **Real-Time Sync**: A single WebSocket connection per player, server-authoritative state
+- **Smart Bot Fill**: Starting with fewer than 4 humans auto-fills the rest with bots
+  (1 human → 3 bots, 2 → 2, 3 → 1, 4 → none), personality assigned randomly per seat
+- **Reconnect Support**: A dropped connection gets a 30-second grace period before
+  anything happens; browser refresh reconnects into the same seat automatically
 
-### 🤖 AI Mode  
-- **Offline Play**: No internet required - play against AI anytime
+### 🤖 AI Mode
+- **Offline Play**: No internet required - play against AI anytime, no server needed at all
 - **3 Personalities**: Face Cautious, Balanced, and Aggressive AI opponents
 - **Smart Decisions**: AI uses probability-based strategies for betting and card play
 
@@ -48,23 +54,23 @@ NOT10 is a 2-4 player card game that combines poker-style betting with strategic
 - **Action Log**: Track all bets, raises, and card plays in real-time
 
 ### 🔒 Security & Fair Play
-- **Row Level Security**: Server-side policies prevent players from seeing others' cards
-- **Anti-Cheat**: Hand cards stored securely in database, only accessible to card owner
-- **Host-Controlled Bots**: Bot actions run on host client to prevent desync issues
-
-### 🔒 Security & Fair Play
-- **Row Level Security**: Server-side policies prevent players from seeing others' cards
-- **Anti-Cheat**: Hand cards stored securely in database, only accessible to card owner
-- **Host-Controlled Bots**: Bot actions run on host client to prevent desync issues
+- **Server-authoritative hands**: the server never sends any player's hand to
+  anyone but that player - not "hidden by the UI," genuinely never
+  transmitted to other clients over the wire
+- **Bot control lives entirely server-side** - no client "controls" bots,
+  so there's no host-desync failure mode to worry about
+- **Disconnected humans are auto-piloted** (using the same AI logic as
+  bots) after the grace period expires, so a dropped connection can't
+  stall the game for everyone else
 
 ---
 
 ## 📖 Complete Gameplay Loop
 
 ### 1️⃣ **Game Start**
-- 2-4 players join a lobby and mark themselves as "Ready"
-- Host clicks "Start Game"
-- If fewer than 4 humans, AI bots auto-fill empty seats
+- 1-4 players join a lobby and mark themselves as "Ready"
+- Host clicks "Start Game" (works solo too - see Smart Bot Fill above)
+- Missing seats auto-fill with AI bots to reach 4 total players
 - Each active player receives their starting hand (4 cards, or 6 cards if only 2 players)
 
 ### 2️⃣ **Betting Phase** 💰
@@ -206,6 +212,8 @@ Player D: Bet $100, lost $100 = -$100 loss ❌
 ### 5️⃣ **Game Over** 👑
 - Game ends when only 1 player has money remaining
 - Winner takes all glory (and virtual cash)
+- In multiplayer, the host can hit **Play Again** to reset the same room
+  (same code, same human players, fresh $1000 each) for a rematch
 
 ---
 
@@ -259,19 +267,19 @@ Player D: Bet $100, lost $100 = -$100 loss ❌
 - **Last Resort**: Sometimes you must play a card that busts you - try to force others first!
 
 ### AI Personality Behaviors
-- **Cautious Carl**: 
+- **Cautious**: 
   - Minimum bets ($100)
   - Finalization: 60-80% chance per turn (randomized)
   - All-in threshold: Only with 85%+ hand strength
   - All-in forced if <$100
   
-- **Balanced Betty**: 
+- **Balanced**: 
   - Moderate bets ($100-$200)
   - Finalization: 40-60% chance per turn (randomized)
   - All-in threshold: 70%+ hand strength
   - Balanced risk-reward decisions
   
-- **Aggressive Alex**: 
+- **Aggressive**: 
   - High bets ($200-$500)
   - Finalization: 30-50% chance per turn (randomized)
   - All-in threshold: 50%+ hand strength
@@ -281,78 +289,75 @@ Player D: Bet $100, lost $100 = -$100 loss ❌
 
 ## 🛠️ How This Was Built
 
-NOT10 was created to demonstrate **modern vanilla JavaScript** capabilities without relying on frameworks or build tools.
-
-### Technology Stack
+### Stack
 
 | Layer | Technology | Purpose |
 |-------|-----------|---------|
-| **Frontend** | Vanilla HTML5, CSS3, ES6+ JavaScript | UI and game logic |
-| **Backend** | Supabase (PostgreSQL + Realtime) | Database and real-time sync |
-| **Deployment** | Static hosting (GitHub Pages, Vercel, Netlify) | Zero-server deployment |
+| **`engine/`** | Pure JavaScript | Game rules - zero network/DOM imports, runs headless in `npm test` |
+| **`server/`** | Node.js + [`ws`](https://www.npmjs.com/package/ws) | HTTP + WebSocket server; owns rooms/connections/bots in memory |
+| **`assets/` + `index.html`** | Vanilla HTML5, CSS3, ES6+ JS | Browser client - no framework, no build step |
+| **Deployment** | Docker (Render/Fly/Railway) | One service, no database, no external accounts |
 
 ### Architecture Highlights
 
-**🎨 Client-Side Only**
-- No build process - runs directly in browser
-- ES6 modules for clean code organization
-- Hash-based routing for screen navigation
-
 **🧩 Three-Layer Split**
-- `assets/js/game.js` is a **pure rules engine**: it takes plain state
-  objects and returns plain results, including an `effects` array
-  describing what *could* be persisted. It has no import of
-  `supabaseClient.js` and no knowledge that a network exists - which is
-  what makes `tests/game.test.js` able to run headlessly (see Testing,
-  below).
-- `assets/js/persistence.js` is the thin adapter: it turns `effects`
-  into actual Supabase calls. It's the only file that sits between the
-  rules and the network.
-- `assets/js/app.js` is the controller that wires rules + persistence +
-  `ui.js` (pure rendering) together for both offline/AI mode (rules only,
-  no persistence) and multiplayer (rules, then `persistence.applyEffects`).
+- `engine/game.js` is a **pure rules engine**: plain functions over plain
+  state objects, mutated in place, returning plain results. It imports
+  nothing but its own `engine/utils.js` sibling - no network, no DOM -
+  which is what makes `tests/game.test.js` able to run headlessly.
+- `server/rooms.js` is the thin session/network layer: it owns rooms,
+  WebSocket connections, reconnection, and bot-turn timing, and calls
+  into `engine/` for every actual rule. It contains no rules itself.
+- `assets/js/app.js` + `ui.js` are the presentation layer: `ui.js` only
+  ever renders whatever state it's given; `app.js` wires the WebSocket
+  transport (`wsClient.js`) to the UI, and reuses the *same* `engine/`
+  module directly (served as a static file, imported via a relative
+  path) for the fully offline AI mode - one source of truth for the
+  rules, whether you're playing solo offline or connected to a server.
 
-**🗄️ Database Design**
-```sql
-rooms          -- Game lobbies
-players        -- Player states (includes is_bot flag)
-round_state    -- Current round data (bets, deck, logs)
-hand_cards     -- Secure per-player card storage
-actions        -- Event log for game history
-```
+**🖥️ Server-Authoritative State**
+- All room/player/hand/round state lives in server memory
+  (`server/rooms.js`'s `Room` class) - there is no database.
+- Every WebSocket message the server sends is a full, per-recipient
+  snapshot (`room`, `players`, `roundState`, and *only your own*
+  `yourHand`) - the client never has to reconcile partial updates, and
+  never even receives another player's cards to begin with.
+- A background sweep (`_reapIdleRooms`) drops rooms that have been
+  empty for 2 hours, so a long-running server doesn't accumulate rooms
+  forever.
 
-**⚡ Real-Time Subscriptions**
-- Room updates → Trigger game state refresh
-- Player joins/leaves → Update lobby
-- Round state changes → Sync all clients
-- Hand card updates → Update player's private hand
-
-**🤖 Bot Auto-Fill System**
-- Deterministic bot IDs prevent duplicates on reconnect
-- Host-only execution eliminates race conditions
-- Reuses offline AI logic for multiplayer bots
-- Cards stored in database like human players
+**🤖 Bot & Disconnected-Player Control**
+- Bots are controlled entirely by the server (`_tick`, `_autoBet`,
+  `_autoPlayCard` in `server/rooms.js`) - there's no "host's browser
+  drives the bots" indirection, so there's nothing to desync.
+- A disconnected human is treated exactly like a bot for turn purposes
+  once their 30-second reconnect grace period expires (same AI
+  decision code, `FALLBACK_PERSONALITY = 'cautious'`), so one dropped
+  connection can't stall the table for everyone else. Reconnecting
+  hands control back immediately.
 
 ### Development Principles
-- ✅ **No frameworks** - Pure vanilla JavaScript
-- ✅ **No build tools** - No webpack, no bundlers
-- ✅ **No runtime NPM dependencies** - Supabase loaded via CDN in the
-  browser. `vitest` is a dev-only dependency for `npm test`; nothing in
-  `index.html` imports from `node_modules`
-- ✅ **Progressive enhancement** - Works offline (AI mode) without backend
-- ✅ **Idempotent operations** - Safe reconnects and page refreshes
+- ✅ **No frameworks** - Pure vanilla JavaScript frontend
+- ✅ **No frontend build step** - the browser loads ES modules directly, no bundler
+- ✅ **One runtime dependency** (`ws`) for the whole server - no framework, no ORM
+- ✅ **No external services** - no database, no third-party account, nothing to configure post-deploy
+- ✅ **Progressive enhancement** - AI mode needs no server connection at all
+- ✅ **Idempotent operations** - safe reconnects and page refreshes
 
 ---
 
 ## 🚀 Quick Start
 
 **Want to play immediately?**
-1. Open `index.html` in your browser
-2. Click "Play vs AI"
-3. Start playing! (No setup required for AI mode)
+```bash
+npm install
+npm start
+```
+Open `http://localhost:8000`, click "Play vs AI" - no setup, no config file, works instantly.
 
-**Want multiplayer?**
-- See [DEPLOYMENT.md](DEPLOYMENT.md) for step-by-step setup instructions
+**Want multiplayer (with friends, or deployed)?**
+- Still just `npm start` - multiplayer runs on the same server, same command.
+- See [DEPLOYMENT.md](DEPLOYMENT.md) for deploying it publicly.
 
 ---
 
@@ -362,64 +367,72 @@ actions        -- Event log for game history
 NOT10/
 ├── index.html                 # Main HTML (all game screens)
 ├── README.md                  # This file - features & gameplay
-├── DEPLOYMENT.md              # Step-by-step deployment guide
-├── package.json                # Dev-only: vitest for `npm test`
-├── vercel.json                 # Declarative Vercel deploy config
-├── render.yaml                  # Declarative Render (static site) deploy config
-├── netlify.toml                 # Declarative Netlify deploy config
-├── .gitignore                 # Git ignore patterns
+├── DEPLOYMENT.md              # Deployment guide
+├── package.json                # `ws` (runtime) + vitest (dev/test)
+├── Dockerfile                   # Single-stage: no build step needed
+├── .dockerignore
+├── render.yaml                  # Declarative Render (Docker web service) deploy config
+│
+├── engine/                     # Pure rules engine - no network/DOM
+│   ├── game.js                 # Betting, card play, bust detection, pot distribution
+│   ├── ai.js                    # AI personalities (bots + auto-piloted disconnects)
+│   └── utils.js                 # Deck/shuffle/turn-order helpers
+│
+├── server/                     # Thin network/session layer
+│   ├── index.js                 # HTTP static file server + /healthz + WebSocket upgrade
+│   └── rooms.js                  # In-memory RoomManager: rooms, reconnection, bot control
 │
 ├── assets/
 │   ├── css/
 │   │   └── styles.css         # Complete styling + design rules (top comment)
 │   │
 │   └── js/
-│       ├── app.js             # Main controller & routing
+│       ├── app.js             # Controller: routing, UI wiring, WS message handling
 │       ├── ui.js              # UI rendering functions (pure presentation)
-│       ├── game.js            # Pure rules engine (no network/DOM)
-│       ├── persistence.js     # Adapter: applies game.js effects to Supabase
-│       ├── ai.js              # AI opponent logic
-│       ├── supabaseClient.js  # Database operations
-│       ├── storage.js         # LocalStorage utilities
-│       ├── utils.js           # Helper functions
-│       ├── config.example.js  # Config template (copy to config.js)
-│       └── config.js          # Your Supabase credentials (gitignored)
+│       ├── wsClient.js         # WebSocket transport (connect/reconnect/send)
+│       └── storage.js         # LocalStorage utilities (player id, session)
 │
 ├── tests/
-│   └── game.test.js           # Headless unit tests for game.js
+│   └── game.test.js           # Headless unit tests for engine/game.js
 │
-└── supabase/
-    ├── schema.sql             # Database table definitions
-    ├── rls.sql                # Row-Level Security policies
-    └── cron.sql                # Scheduled cleanup of old rooms (pg_cron)
+└── scripts/
+    ├── smoke-test.js            # Live WebSocket check: solo game, bot-fill, full round
+    └── smoke-test-2p.js         # Live check: 2-human bot-fill count + reconnection
 ```
 
 ---
 
 ## 🔧 Key Technical Implementation
 
-### Game Logic (`game.js`)
+### Game Logic (`engine/game.js`)
 ```javascript
-startNewRound()      // Initialize round, deal cards, set starting player
-processBet()         // Handle bets, calls, all-ins, and finalizations
-processCardPlay()    // Process card plays, check bust condition
-endRound()           // Award pot to winner, check game over
-getGameState()       // Get current state for AI/UI
-isBettingComplete()  // Check if all players have finalized
-transitionToPlaying()// Move from betting to playing phase
+startNewRound()       // Initialize round, deal cards, set starting player
+processBet()          // Handle bets, calls, all-ins, and finalizations
+processCardPlay()     // Process card plays, check bust condition
+endRound()            // Weighted pot distribution, rotate starting player
+isBettingComplete()   // Check if all active players have finalized
+transitionToPlaying() // Move from betting to playing phase
+applyPositionChoice() // Apply the highest bettor's first/last choice
+checkGameOver()        // Only one player left with money?
 ```
 Every function above is pure and synchronous - it mutates the room/player
-objects it's given and returns `{ ...result, effects }`. It never touches
-Supabase directly.
+objects it's given and returns a plain result. It never touches the
+network.
 
-### Persistence Adapter (`persistence.js`)
+### Server / Session Layer (`server/rooms.js`)
 ```javascript
-applyEffects(effects)  // Turns a game.js `effects` array into the matching
-                        // Supabase calls, in order. The only file that
-                        // bridges the rules engine and the network.
+class RoomManager {
+  handleMessage(ws, raw)     // Dispatches every client message by type
+  handleDisconnect(ws)       // Starts the 30s reconnect grace period
+  _startGame(ws)              // Bot auto-fill (randomized personalities), starts round 1
+  _advanceBetting(room, id)   // Next player's turn, or transition to playing
+  _endRound(room, id)          // Pot distribution, game-over check, next round
+  _tick(room)                  // Per-room heartbeat: bot / disconnected-human autoplay
+  _broadcast(room)             // Per-recipient state - only your own hand, ever
+}
 ```
 
-### AI System (`ai.js`)
+### AI System (`engine/ai.js`)
 ```javascript
 AIPlayer class       // AI player with personality, hand, money
 chooseBetAction()    // Betting decisions based on personality
@@ -427,30 +440,15 @@ shouldFinalizeBet()  // Decide when to finalize bet
 chooseCard()         // Card selection logic (avoid busting)
 executeAIBet()       // Execute AI betting with delay and smart all-in decisions
 executeAICardPlay()  // Execute AI card play with delay
+choosePosition()     // First/last position choice based on hand strength
 ```
+Used identically by offline AI mode (in-browser) and by the server's bot
+control - one implementation, no drift between the two.
 
-### Multiplayer Sync (`supabaseClient.js`)
+### WebSocket Transport (`assets/js/wsClient.js`)
 ```javascript
-// Room management
-createRoom()         // Create new lobby
-getRoom()            // Fetch room data
-updateRoom()         // Update room state
-
-// Player operations  
-createPlayer()       // Join lobby
-upsertBotPlayer()    // Create AI bot player
-updatePlayer()       // Update player state
-
-// Round state
-initRoundState()     // Initialize new round
-updateRoundState()   // Update round data
-saveHandCards()      // Store player hands securely
-getBotHandCards()    // Host reads bot hands
-
-// Real-time subscriptions
-subscribeToRoom()    // Listen for room changes
-subscribeToPlayers() // Listen for player updates
-subscribeToRoundState() // Listen for round changes
+connect(onMessage, onOpen)  // Opens the socket, auto-reconnects with backoff
+send(payload)                 // Sends (or queues, if mid-reconnect) a message
 ```
 
 ### UI Rendering (`ui.js`)
@@ -468,13 +466,11 @@ showGameOver()       // Display winner & final standings
 
 ## 🧪 Testing
 
-`assets/js/game.js` is a pure rules engine - no network, no storage, no
-DOM - so it has a headless unit test suite that runs in milliseconds with
-no browser and no Supabase project:
+`engine/game.js` is a pure rules engine - no network, no storage, no DOM -
+so it has a headless unit test suite that runs in milliseconds:
 
 ```bash
-npm install   # installs vitest as a dev-only dependency; nothing ships
-              # to the browser, index.html never imports node_modules
+npm install
 npm test
 ```
 
@@ -483,81 +479,79 @@ npm test
 weighted pot distribution and its rounding-remainder handling, game-over
 detection, and position-choice turn ordering.
 
+For anything that depends on timing, concurrency, or the actual network
+protocol - which a unit test can't see - there are throwaway, scripted
+live checks against a running server:
+
+```bash
+npm start                       # in one terminal
+node scripts/smoke-test.js      # in another: solo game, 3-bot fill, full round
+node scripts/smoke-test-2p.js   # 2-human bot-fill count + mid-game reconnect
+```
+
 **What this does NOT verify** (the honest gap, updated as it changes):
-- Anything in `app.js`, `ui.js`, or `supabaseClient.js` - the routing,
-  rendering, realtime subscriptions, and reconnect flow are only
-  exercised by manually playing the game (see the Testing Checklist in
-  [DEPLOYMENT.md](DEPLOYMENT.md)).
-- The multiplayer betting turn-advancement, host-driven bot betting/
-  playing/position-choice, and round-end/game-over flow in `app.js`
-  (`advanceMultiplayerBetting`, `maybeHandleBotPositionChoice`,
-  `handleMultiplayerBust`, `triggerBotTurn`) - these were rewritten to fix
-  real bugs (round_state writes to columns `schema.sql` didn't define,
-  `triggerBotTurn` reading room fields off the wrong object, betting
-  never advancing turn_player_id in multiplayer, bots never finalizing
-  their own bets) found by reading the code against a real Postgres
-  schema, not by running a live multiplayer game against Supabase. They
-  are logic-reviewed and internally consistent with the offline/AI-mode
-  code they mirror, but not exercised end to end.
-- Multiplayer concurrency/timing - e.g. whether the host's bot runner and
-  a real player's action can race on the same `round_state` row. This
-  needs a live, scripted check against a running Supabase project, not a
-  unit test, and doesn't currently exist.
-- The `hand_cards` RLS policy's actual behavior against a real Supabase
-  project (auth.uid() matching, bot-row exception) - the SQL is reviewed
-  but not exercised by an automated test.
+- Anything purely visual/client-side in `ui.js` or `styles.css` - the
+  card animations, position-choice screen, spectator view, etc. have
+  only been checked by reading the code, not by opening a browser.
+- Long-running stability - the smoke tests exercise one room for one or
+  two rounds; they don't prove behavior under many concurrent rooms or
+  over hours of uptime.
+- The `Room` class's behavior under truly pathological timing (e.g. a
+  player disconnecting at the exact moment their grace-period timer
+  would have fired) - plausible edge cases exist that neither the unit
+  tests nor the smoke tests specifically target.
 
-**Before relying on multiplayer for a real game night**, play at least one
-full round end-to-end against a real Supabase project (2+ browser tabs,
-at least one bot auto-filled) and watch the browser console on both the
-host tab and a non-host tab for errors - that's the cheapest way to catch
-anything the above review missed.
+A clean `npm test` run means the rules are correct in isolation; the
+smoke tests mean the protocol and bot/reconnect timing work in the
+scenarios they actually exercise - neither is a substitute for someone
+playing a real multi-tab game before a game night that matters.
 
-A clean `npm test` run means the rules are correct in isolation, not that
-the whole game works end to end - see the Testing Checklist in
-DEPLOYMENT.md for the closest thing to an integration check this project
-has.
+---
 
 ## 🐛 Troubleshooting
 
 | Issue | Solution |
 |-------|----------|
-| **"Supabase Not Configured"** | Create `assets/js/config.js` from `config.example.js` with valid credentials |
-| **Can't reconnect after refresh** | Check localStorage is enabled; room must still be active |
-| **Game state not updating** | Verify Supabase Realtime is enabled in project settings |
-| **Cards not dealing** | Ensure all SQL scripts ran successfully; check RLS policies |
-| **Players can't join** | Room code is case-sensitive; ensure room status is "lobby" |
-| **Bots not working** | Check browser console for errors; host must stay connected |
+| **Blank page / can't connect** | Make sure you're visiting the server's URL (e.g. `http://localhost:8000`), not opening `index.html` directly - the game needs to reach `/ws` on the same origin |
+| **"Connection lost" toast** | The server isn't reachable - check it's actually running / check deploy logs. The client retries automatically once it's back |
+| **Can't reconnect after refresh** | localStorage must be enabled; the room must still exist server-side (see "no database" in DEPLOYMENT.md - a host restart/redeploy drops in-progress rooms) |
+| **Players can't join** | Room code is case-insensitive but must be the full 6 characters; room must still be in the lobby (not already started) |
+| **Bots not acting** | Check the server's logs/console for errors in `server/rooms.js`'s turn loop |
 
 ---
 
 ## 🔐 Security Considerations
 
-### Row Level Security (RLS)
-Hand cards use Supabase RLS policies:
-```sql
--- Players can ONLY read their own cards
-CREATE POLICY "Players can read own cards"
-ON hand_cards FOR SELECT
-USING (player_id = auth.uid() OR is_bot = true);
-```
+### What's actually enforced
+- **Hands are never sent to anyone but their owner.** This isn't a UI
+  convention the client is trusted to respect - the server (`_broadcast`
+  in `server/rooms.js`) only ever includes `yourHand` for the specific
+  connection it's sending to. There is no message a malicious client can
+  send that returns another player's cards, because the server never
+  holds them anywhere the response-building code can reach across
+  players.
+- **Turn/phase/action validation** happens in `engine/game.js` on every
+  message (wrong turn, wrong phase, insufficient funds, invalid bet
+  amount, etc. are all rejected server-side), not just hidden by
+  disabling buttons in the UI.
 
 ### Limitations
-- Client-side validation can be bypassed by determined users
-- Best for casual play with trusted friends
-- Consider server-side validation for competitive play
-
-### Best Practices
-- Play in private lobbies
-- Share room codes only with trusted players
-- Use environment variables for production deployments
+- There's no authentication - a player's identity is just whatever
+  `player_id` their browser has in localStorage. Anyone with your room
+  code can join if a seat is open; treat codes like a house key, share
+  them only with people you intend to play with.
+- No persistence - a server restart or redeploy loses all in-progress
+  games (see DEPLOYMENT.md). Fine for casual play, not for anything
+  where losing a game mid-way would be a real problem.
+- Best for casual play with trusted friends, same as before.
 
 ---
 
 ## 🎨 Customization
 
 ### Change Theme Colors
-Edit CSS variables in `assets/css/styles.css`:
+Edit CSS variables in `assets/css/styles.css` (see the design-rules
+comment at the top of the file for what each color is allowed to mean):
 ```css
 :root {
     --bg-dark: #0a0e1a;
@@ -569,7 +563,9 @@ Edit CSS variables in `assets/css/styles.css`:
 ```
 
 ### Adjust Game Rules
-Edit constants in `assets/js/game.js`:
+Edit constants in `engine/game.js` (this single file is shared by both
+offline AI mode and the multiplayer server, so a change here applies
+everywhere):
 ```javascript
 export const GAME_CONSTANTS = {
     STARTING_MONEY: 100000,    // $1000
@@ -579,10 +575,11 @@ export const GAME_CONSTANTS = {
 ```
 
 ### Modify AI Behavior
-Adjust AI personalities in `assets/js/ai.js`:
+Adjust AI personalities in `engine/ai.js`:
 - Change betting thresholds
 - Modify card selection logic
-- Add new personality types
+- Add new personality types (also update `BOT_PERSONALITIES` in
+  `server/rooms.js` if you want the new type available for auto-fill)
 
 ---
 
@@ -597,7 +594,7 @@ Adjust AI personalities in `assets/js/ai.js`:
 - [ ] Custom deck designs
 - [ ] Animated card dealing
 - [ ] Leaderboards
-- [ ] Spectator mode enhancements
+- [ ] Optional persistence (so a restart doesn't drop in-progress games)
 
 ---
 
@@ -608,9 +605,9 @@ MIT License - Feel free to use, modify, and distribute.
 ## 🙏 Acknowledgments
 
 Created as a demonstration of:
+- A pure-logic-core / thin-network-layer / dumb-presentation-layer split
+- Self-contained, database-free multiplayer game servers
 - Vanilla JavaScript capabilities without frameworks
-- Real-time multiplayer game development
-- Supabase for backend-as-a-service
 - Clean, maintainable code architecture
 
 ---
@@ -618,5 +615,3 @@ Created as a demonstration of:
 **Enjoy playing NOT10! 🎮**
 
 For deployment instructions, see [DEPLOYMENT.md](DEPLOYMENT.md)
-
-**Enjoy playing NOT10!** 🎮🃏

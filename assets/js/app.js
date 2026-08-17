@@ -6,21 +6,9 @@
 import * as ui from './ui.js';
 import * as utils from './utils.js';
 import * as storage from './storage.js';
-import * as supabaseClient from './supabaseClient.js';
-import * as persistence from './persistence.js';
-import * as game from './game.js';
-import * as ai from './ai.js';
-
-// Check if config exists, otherwise use example
-let config;
-try {
-    const configModule = await import('./config.js');
-    config = configModule.config;
-} catch (err) {
-    console.warn('config.js not found, using example config');
-    const configModule = await import('./config.example.js');
-    config = configModule.config;
-}
+import * as wsClient from './wsClient.js';
+import * as game from '../../engine/game.js';
+import * as ai from '../../engine/ai.js';
 
 // Global app state
 const appState = {
@@ -35,66 +23,46 @@ const appState = {
     players: [],
     roundState: null,
     myHand: [],
-    subscriptions: [],
     aiPlayers: [],
-    aiLoopInterval: null,
-    botRunnerLock: null, // setInterval handle for the multiplayer bot runner
-    botTurnInProgress: false, // Re-entrancy guard for triggerBotTurn
-    botPositionChoiceInProgress: false, // Re-entrancy guard for maybeHandleBotPositionChoice
-    multiplayerBotHands: {} // Cache bot hands for host: {botId: [cards]}
+    aiLoopInterval: null
 };
 
 // Initialize app
-async function init() {
+function init() {
     console.log('Initializing NOT10...');
-    
-    // Get or create player ID (used as-is for offline/AI mode)
+
+    // Get or create player ID - the same id is reused for multiplayer, since
+    // the server is what enforces "only you see your own hand" now, not an
+    // external auth/RLS layer, so there's no separate authenticated identity
+    // to fetch.
     appState.currentUser.playerId = storage.getOrCreatePlayerId();
     appState.currentUser.name = storage.getPlayerName() || '';
 
-    // Try to initialize Supabase if configured
-    let supabaseReady = false;
-    try {
-        if (config.supabaseUrl && config.supabaseUrl !== 'https://your-project.supabase.co') {
-            await supabaseClient.initSupabase(config.supabaseUrl, config.supabaseAnonKey);
-            supabaseReady = true;
+    wsClient.connect(handleServerMessage, handleSocketOpen);
 
-            // For multiplayer, the player id must be the authenticated identity,
-            // not a client-chosen one - hand_cards RLS trusts auth.uid(), so an
-            // unauthenticated/spoofed id here would just be denied on read.
-            const authUserId = await supabaseClient.getAuthUserId();
-            if (authUserId) {
-                appState.currentUser.playerId = authUserId;
-            } else {
-                console.warn('No authenticated session; falling back to local player id. Multiplayer hand security will not be enforced - see supabase/rls.sql.');
-            }
-        }
-    } catch (error) {
-        console.error('Supabase initialization failed:', error);
-    }
-    
     // Setup event listeners
     setupEventListeners();
-    
+
     // Setup modals
     ui.setupModal('help-modal', 'close-help-btn');
-    
+
     // Handle routing
     handleRoute();
     window.addEventListener('hashchange', handleRoute);
-    
-    // Show appropriate screen
-    if (!supabaseReady) {
-        ui.showScreen('setup-screen');
-    } else {
-        // Check for existing session
-        const savedRoomCode = storage.getRoomCode();
-        if (savedRoomCode) {
-            // Try to rejoin
-            await rejoinRoom(savedRoomCode);
-        } else {
-            ui.showScreen('menu-screen');
-        }
+
+    ui.showScreen('menu-screen');
+}
+
+/**
+ * Runs every time the WebSocket (re)connects, including automatic
+ * reconnects after a dropped connection. If we were already in a room
+ * (page refresh, or a reconnect mid-session), ask the server to reattach
+ * us rather than starting over.
+ */
+function handleSocketOpen() {
+    const savedRoomCode = storage.getRoomCode();
+    if (savedRoomCode && appState.mode !== 'ai') {
+        wsClient.send({ type: 'rejoin', playerId: appState.currentUser.playerId, roomCode: savedRoomCode });
     }
 }
 
@@ -107,8 +75,7 @@ function setupEventListeners() {
     });
     document.getElementById('play-ai-btn')?.addEventListener('click', handlePlayAI);
     document.getElementById('help-btn')?.addEventListener('click', ui.showHelpModal);
-    document.getElementById('play-offline-btn')?.addEventListener('click', handlePlayAI);
-    
+
     // Join screen
     document.getElementById('join-room-btn')?.addEventListener('click', handleJoinRoom);
     document.getElementById('back-from-join-btn')?.addEventListener('click', () => {
@@ -161,12 +128,22 @@ function setupEventListeners() {
     
     // Game over screen
     document.getElementById('play-again-btn')?.addEventListener('click', () => {
-        window.location.hash = '#/menu';
-        window.location.reload();
+        if (appState.mode === 'multiplayer') {
+            // Rematch in the same room/lobby (host-only server-side; a
+            // non-host tap just gets a toast telling them to wait for the host).
+            handlePlayAgain();
+        } else {
+            window.location.hash = '#/menu';
+            window.location.reload();
+        }
     });
     document.getElementById('back-to-menu-btn')?.addEventListener('click', () => {
-        window.location.hash = '#/menu';
-        window.location.reload();
+        if (appState.mode === 'multiplayer') {
+            handleLeaveRoom();
+        } else {
+            window.location.hash = '#/menu';
+            window.location.reload();
+        }
     });
 }
 
@@ -192,241 +169,79 @@ function handleRoute() {
 // MULTIPLAYER HANDLERS
 // ==========================================
 
-async function handleCreateLobby() {
+function handleCreateLobby() {
+    const playerName = appState.currentUser.name || 'Player';
+    appState.mode = 'multiplayer';
+    storage.savePlayerName(playerName);
+
     ui.showLoading('Creating lobby...');
-    
-    try {
-        // Generate room code
-        const code = utils.generateRoomCode();
-        
-        // Create room in database
-        await supabaseClient.createRoom(code, appState.currentUser.playerId);
-        
-        // Join as host
-        appState.mode = 'multiplayer';
-        appState.roomCode = code;
-        appState.isHost = true;
-        storage.saveRoomCode(code);
-        
-        // Create player entry
-        const playerName = appState.currentUser.name || 'Player';
-        await supabaseClient.createPlayer({
-            id: appState.currentUser.playerId,
-            room_code: code,
-            name: playerName,
-            seat_index: 0,
-            money_cents: game.GAME_CONSTANTS.STARTING_MONEY
-        });
-        
-        storage.savePlayerName(playerName);
-        
-        // Load room data and subscribe
-        await loadRoomData();
-        subscribeToRoom();
-        
-        // Show create screen
-        ui.showScreen('create-screen');
-        ui.updateRoomCode('room-code-text', code);
-        
-        // Set player name input
-        const nameInput = document.getElementById('create-player-name');
-        if (nameInput) {
-            nameInput.value = playerName;
-            nameInput.addEventListener('change', async (e) => {
-                const newName = e.target.value.trim();
-                if (newName) {
-                    await supabaseClient.updatePlayer(appState.currentUser.playerId, { name: newName });
-                    appState.currentUser.name = newName;
-                    storage.savePlayerName(newName);
-                }
-            });
-        }
-        
-        window.location.hash = '#/create';
-        
-    } catch (error) {
-        console.error('Failed to create lobby:', error);
-        ui.showToast('Failed to create lobby');
-        ui.showScreen('menu-screen');
-    }
+    wsClient.send({ type: 'create_room', playerId: appState.currentUser.playerId, name: playerName });
+
+    // The 'state' handler (handleServerMessage) picks up the room code from
+    // the server's response and finishes the screen transition, since the
+    // server - not this client - decides the actual room code.
 }
 
-async function handleJoinRoom() {
+function handleJoinRoom() {
     const codeInput = document.getElementById('join-room-code');
     const nameInput = document.getElementById('join-player-name');
-    
+
     const code = codeInput?.value.trim().toUpperCase();
     const name = nameInput?.value.trim();
-    
-    // Validate
+
     const nameValidation = utils.validatePlayerName(name);
     if (!nameValidation.valid) {
         ui.showError('join-error', nameValidation.error);
         return;
     }
-    
     if (!code || code.length !== 6) {
         ui.showError('join-error', 'Please enter a valid 6-character room code');
         return;
     }
-    
+
     ui.hideError('join-error');
     ui.showLoading('Joining room...');
-    
-    try {
-        // Check if room exists
-        const room = await supabaseClient.getRoom(code);
-        if (!room) {
-            ui.showScreen('join-screen');
-            ui.showError('join-error', 'Room not found');
-            return;
-        }
-        
-        if (room.status !== 'lobby') {
-            ui.showScreen('join-screen');
-            ui.showError('join-error', 'Game already in progress');
-            return;
-        }
-        
-        // Find available seat
-        const seatIndex = await supabaseClient.findAvailableSeat(code);
-        if (seatIndex === -1) {
-            ui.showScreen('join-screen');
-            ui.showError('join-error', 'Room is full (4 players max)');
-            return;
-        }
-        
-        // Create player entry
-        await supabaseClient.createPlayer({
-            id: appState.currentUser.playerId,
-            room_code: code,
-            name: name,
-            seat_index: seatIndex,
-            money_cents: game.GAME_CONSTANTS.STARTING_MONEY
-        });
-        
-        appState.mode = 'multiplayer';
-        appState.roomCode = code;
-        appState.isHost = false;
-        appState.currentUser.name = name;
-        storage.saveRoomCode(code);
-        storage.savePlayerName(name);
-        
-        // Load room data and subscribe
-        await loadRoomData();
-        subscribeToRoom();
-        
-        // Show lobby screen
-        ui.showScreen('lobby-screen');
-        ui.updateRoomCode('lobby-room-code', code);
-        
-        window.location.hash = '#/lobby';
-        
-    } catch (error) {
-        console.error('Failed to join room:', error);
-        ui.showScreen('join-screen');
-        ui.showError('join-error', 'Failed to join room');
+
+    appState.mode = 'multiplayer';
+    appState.currentUser.name = name;
+    storage.savePlayerName(name);
+
+    wsClient.send({ type: 'join_room', playerId: appState.currentUser.playerId, name, roomCode: code });
+}
+
+function handleToggleReady() {
+    const myPlayer = appState.players.find(p => p.id === appState.currentUser.playerId);
+    if (!myPlayer) return;
+
+    const newReadyState = !myPlayer.is_ready;
+    wsClient.send({ type: 'set_ready', ready: newReadyState });
+
+    // Optimistic local update - the authoritative 'state' broadcast follows
+    // right behind and will correct this if anything went wrong.
+    myPlayer.is_ready = newReadyState;
+    const readyBtn = document.getElementById('ready-btn') || document.getElementById('lobby-ready-btn');
+    if (readyBtn) {
+        readyBtn.textContent = newReadyState ? 'Not Ready' : 'Ready';
     }
 }
 
-async function handleToggleReady() {
-    try {
-        const myPlayer = appState.players.find(p => p.id === appState.currentUser.playerId);
-        if (!myPlayer) return;
-        
-        const newReadyState = !myPlayer.is_ready;
-        await supabaseClient.updatePlayer(appState.currentUser.playerId, { is_ready: newReadyState });
-        
-        myPlayer.is_ready = newReadyState;
-        
-        // Update UI
-        const readyBtn = document.getElementById('ready-btn') || document.getElementById('lobby-ready-btn');
-        if (readyBtn) {
-            readyBtn.textContent = newReadyState ? 'Not Ready' : 'Ready';
-        }
-        
-    } catch (error) {
-        console.error('Failed to toggle ready:', error);
-        ui.showToast('Failed to update ready status');
-    }
-}
-
-async function handleStartGame() {
+function handleStartGame() {
     if (!appState.isHost) return;
-    
-    const allPlayers = appState.players;
-    const humanPlayers = allPlayers.filter(p => !p.is_bot);
-    const readyHumans = humanPlayers.filter(p => p.is_ready);
-    
-    if (readyHumans.length < 2) {
-        ui.showToast('Need at least 2 ready human players to start');
-        return;
-    }
-    
-    try {
-        ui.showLoading('Starting game...');
-        
-        // Auto-fill missing seats with bots (target 4 total players)
-        const occupiedSeats = allPlayers.map(p => p.seat_index);
-        const missingSeats = [];
-        for (let i = 0; i < 4; i++) {
-            if (!occupiedSeats.includes(i)) {
-                missingSeats.push(i);
-            }
-        }
-        
-        // Create bots for missing seats
-        const botPersonalities = ['Cautious', 'Balanced', 'Aggressive'];
-        for (let idx = 0; idx < missingSeats.length; idx++) {
-            const seatIndex = missingSeats[idx];
-            const personality = botPersonalities[idx % botPersonalities.length];
-            await supabaseClient.upsertBotPlayer(appState.roomCode, seatIndex, personality);
-        }
-        
-        // Reload players to include bots
-        if (missingSeats.length > 0) {
-            await loadRoomData();
-        }
-        
-        // Update room status
-        await supabaseClient.updateRoom(appState.roomCode, {
-            status: 'in_game',
-            current_round: 0
-        });
-        
-        // Start first round
-        await startMultiplayerRound();
-        
-    } catch (error) {
-        console.error('Failed to start game:', error);
-        ui.showToast('Failed to start game');
-        ui.showScreen('create-screen');
-    }
+    wsClient.send({ type: 'start_game' });
 }
 
-async function handleLeaveRoom() {
-    // Stop bot runner if active
-    stopMultiplayerBotRunner();
-    
-    // Unsubscribe from all
-    for (const sub of appState.subscriptions) {
-        await supabaseClient.unsubscribe(sub);
-    }
-    appState.subscriptions = [];
-    
-    // Clear storage
+function handleLeaveRoom() {
+    wsClient.send({ type: 'leave_room' });
+
     storage.clearRoomCode();
     storage.clearSession();
-    
-    // Reset state
+
     appState.roomCode = null;
     appState.room = null;
     appState.players = [];
     appState.roundState = null;
     appState.myHand = [];
-    appState.multiplayerBotHands = {};
-    
-    // Go to menu
+
     window.location.hash = '#/menu';
     ui.showScreen('menu-screen');
 }
@@ -636,7 +451,7 @@ async function executeAIBetTurn(aiPlayer) {
         
         // Check if betting is complete
         const activePlayers = appState.players.filter(p => p.status === 'active');
-        if (game.isBettingComplete(activePlayers, appState.roundState.bets_json, appState.roundState.finalized_json)) {
+        if (game.isBettingComplete(activePlayers, appState.roundState.finalized_json)) {
             const transitionResult = game.transitionToPlaying(appState.room, activePlayers, appState.roundState);
             
             if (transitionResult.needsPositionChoice) {
@@ -735,13 +550,12 @@ async function handleAIPositionChoice(transitionResult) {
 
 // Handle human player position choice
 async function handlePositionChoice(choice) {
-    const activePlayers = appState.players.filter(p => p.status === 'active');
-
     if (appState.mode === 'ai') {
+        const activePlayers = appState.players.filter(p => p.status === 'active');
         game.applyPositionChoice(appState.room, activePlayers, appState.roundState, choice);
     } else {
-        const result = game.applyPositionChoice(appState.room, activePlayers, appState.roundState, choice);
-        await persistence.applyEffects(result.effects);
+        handleMultiplayerPositionChoice(choice);
+        return; // the server's 'state' broadcast drives the UI update, not this client
     }
 
     updateGameUI();
@@ -788,7 +602,7 @@ async function handleAIRaise(amount) {
     
     // Check if betting is complete
     const activePlayers = appState.players.filter(p => p.status === 'active');
-    if (game.isBettingComplete(activePlayers, appState.roundState.bets_json, appState.roundState.finalized_json)) {
+    if (game.isBettingComplete(activePlayers, appState.roundState.finalized_json)) {
         const transitionResult = game.transitionToPlaying(appState.room, activePlayers, appState.roundState);
         
         if (transitionResult.needsPositionChoice) {
@@ -843,7 +657,7 @@ async function handleAIAllIn() {
     
     // Check if betting is complete
     const activePlayers = appState.players.filter(p => p.status === 'active');
-    if (game.isBettingComplete(activePlayers, appState.roundState.bets_json, appState.roundState.finalized_json)) {
+    if (game.isBettingComplete(activePlayers, appState.roundState.finalized_json)) {
         const transitionResult = game.transitionToPlaying(appState.room, activePlayers, appState.roundState);
         
         if (transitionResult.needsPositionChoice) {
@@ -890,7 +704,7 @@ async function handleAICall() {
     
     // Check if betting is complete
     const activePlayers = appState.players.filter(p => p.status === 'active');
-    if (game.isBettingComplete(activePlayers, appState.roundState.bets_json, appState.roundState.finalized_json)) {
+    if (game.isBettingComplete(activePlayers, appState.roundState.finalized_json)) {
         const transitionResult = game.transitionToPlaying(appState.room, activePlayers, appState.roundState);
         
         if (transitionResult.needsPositionChoice) {
@@ -945,7 +759,7 @@ async function handleAIFinalize() {
     
     // Check if betting is complete
     const activePlayers = appState.players.filter(p => p.status === 'active');
-    if (game.isBettingComplete(activePlayers, appState.roundState.bets_json, appState.roundState.finalized_json)) {
+    if (game.isBettingComplete(activePlayers, appState.roundState.finalized_json)) {
         const transitionResult = game.transitionToPlaying(appState.room, activePlayers, appState.roundState);
         
         if (transitionResult.needsPositionChoice) {
@@ -1023,620 +837,125 @@ async function handleAICardClick(cardValue) {
     }
 }
 
+
 // ==========================================
-// MULTIPLAYER GAME LOGIC
+// MULTIPLAYER (WebSocket-driven)
 // ==========================================
+//
+// Unlike the AI-mode section above, there is almost no logic here: the
+// server (server/rooms.js) is authoritative for turn advancement, bot
+// control, and round-end handling. This client only sends intents and
+// re-renders whenever a 'state' broadcast arrives (handleServerMessage).
+// Design trade-off worth knowing: because every update is a full
+// snapshot rather than a granular per-action event, the "still deciding"
+// pulsing indicator AI mode shows while a bot is mid-turn doesn't have an
+// equivalent here - you only see a bot's move once it's already resolved.
+// Whose turn it is right now is still shown via the normal active-turn
+// highlight on their player panel.
 
-async function startMultiplayerRound() {
-    ui.showScreen('game-screen');
-    ui.initGameScreen();
-    
-    await utils.sleep(500);
-    
-    try {
-        const result = game.startNewRound(appState.room, appState.players);
-        await persistence.applyEffects(result.effects);
+function handleMultiplayerRaise(amount) {
+    wsClient.send({ type: 'bet', action: 'bet', amount });
+}
 
-        if (result.gameOver) {
-            ui.showGameOver(result.winner, appState.players);
-            return;
-        }
+function handleMultiplayerCall() {
+    wsClient.send({ type: 'bet', action: 'call', amount: null });
+}
 
-        // Reload room and round state
-        await loadRoomData();
-        await loadRoundState();
-        await loadMyHand();
-        
-        // If host, load bot hands for bot control
-        if (appState.isHost) {
-            await loadBotHands();
-        }
-        
-        updateGameUI();
-        ui.addLogEntry(`Round ${result.round} started`, 'highlight');
-        
-        // Start bot runner if host
-        if (appState.isHost) {
-            startMultiplayerBotRunner();
-        }
-        
-    } catch (error) {
-        console.error('Failed to start round:', error);
-        ui.showToast('Failed to start round');
-    }
+function handleMultiplayerAllIn() {
+    wsClient.send({ type: 'bet', action: 'all-in', amount: null });
+}
+
+function handleMultiplayerFinalize() {
+    wsClient.send({ type: 'bet', action: 'finalize', amount: null });
+}
+
+function handleMultiplayerCardClick(cardValue) {
+    wsClient.send({ type: 'play_card', value: cardValue });
+}
+
+function handleMultiplayerPositionChoice(choice) {
+    wsClient.send({ type: 'choose_position', choice });
+}
+
+function handlePlayAgain() {
+    wsClient.send({ type: 'play_again' });
 }
 
 /**
- * After any successful multiplayer bet action, either hand the turn to the
- * next player who hasn't finalized, or - once everyone has - transition to
- * the playing phase. Mirrors handleAIRaise/handleAICall/etc, but persisted
- * so every client (not just the one who acted) sees the new turn_player_id.
- *
- * If the highest bettor needs to choose a position: a human player sees the
- * prompt reactively (updateGameUI + handlePositionChoice already persist
- * their choice); a bot's choice is handled separately by the host via
- * maybeHandleBotPositionChoice, reacting to awaiting_position_choice rather
- * than being driven from here - the client that completes betting isn't
- * necessarily the host, and only the host is allowed to act for bots.
+ * Single entry point for every server push.
  */
-async function advanceMultiplayerBetting(actingPlayerId) {
-    const activePlayers = appState.players.filter(p => p.status === 'active');
-
-    if (game.isBettingComplete(activePlayers, appState.roundState.bets_json, appState.roundState.finalized_json)) {
-        const transitionResult = game.transitionToPlaying(appState.room, activePlayers, appState.roundState);
-        await persistence.applyEffects(transitionResult.effects);
-    } else {
-        const actingPlayer = appState.players.find(p => p.id === actingPlayerId);
-        if (!actingPlayer) return;
-        const nextPlayer = game.getNextBettingPlayer(activePlayers, actingPlayer.seat_index, appState.roundState.finalized_json);
-        if (nextPlayer) {
-            await supabaseClient.updateRoom(appState.roomCode, { turn_player_id: nextPlayer.id });
-        }
-    }
-}
-
-/**
- * Host-only: react to awaiting_position_choice being set for a bot. Wired
- * into the room/round_state subscriptions so it fires regardless of which
- * client actually completed the betting round.
- */
-async function maybeHandleBotPositionChoice() {
-    if (!appState.isHost || !appState.roundState?.awaiting_position_choice) return;
-    if (appState.botPositionChoiceInProgress) return;
-
-    const bettor = appState.players.find(p => p.id === appState.roundState.highest_bettor_id);
-    if (!bettor || !bettor.is_bot) return; // human bettor - their own client handles it
-
-    appState.botPositionChoiceInProgress = true;
-    try {
-        ui.addLogEntry(`${bettor.name} is choosing position...`);
-        await utils.sleep(1000 + Math.random() * 1500);
-
-        // Re-check after the delay - another update may have already resolved this
-        if (!appState.roundState?.awaiting_position_choice) return;
-
-        const activePlayers = appState.players.filter(p => p.status === 'active');
-        const personality = extractBotPersonality(bettor.name);
-        const aiInstance = new ai.AIPlayer(bettor.id, bettor.name, personality, bettor.seat_index);
-        aiInstance.hand = appState.multiplayerBotHands[bettor.id] || [];
-        const choice = ai.choosePosition(aiInstance, appState.room.table_total || 0);
-
-        const posResult = game.applyPositionChoice(appState.room, activePlayers, appState.roundState, choice);
-        await persistence.applyEffects(posResult.effects);
-    } finally {
-        appState.botPositionChoiceInProgress = false;
-    }
-}
-
-/**
- * Handles a bust in multiplayer: award the pot, check for a game winner,
- * and either end the game or start the next round. Only ever runs on the
- * single client whose own action caused the bust (the busted human, or the
- * host if a bot busted) - never triggered reactively - so there's no risk
- * of two clients double-applying it.
- */
-async function handleMultiplayerBust(eliminatedPlayerId) {
-    await utils.sleep(1500);
-
-    const result = game.endRound(appState.room, appState.players, appState.roundState, eliminatedPlayerId);
-    await persistence.applyEffects(result.effects);
-
-    ui.addLogEntry('Round ended', 'highlight');
-
-    const winner = game.checkGameOver(appState.players);
-    if (winner) {
-        await supabaseClient.updateRoom(appState.roomCode, { status: 'finished' });
-        if (appState.isHost) stopMultiplayerBotRunner();
-        ui.showGameOver(winner, appState.players);
-        return;
-    }
-
-    await utils.sleep(2000);
-    await startMultiplayerRound();
-}
-
-async function handleMultiplayerRaise(amount) {
-    try {
-        const result = game.processBet(
-            appState.room,
-            appState.players,
-            appState.roundState,
-            appState.currentUser.playerId,
-            'bet',
-            amount
-        );
-
-        if (!result.success) {
-            ui.showToast(result.error);
-            return;
-        }
-
-        await persistence.applyEffects(result.effects);
-        await advanceMultiplayerBetting(appState.currentUser.playerId);
-        // State will update via subscription
-
-    } catch (error) {
-        console.error('Failed to raise:', error);
-        ui.showToast('Failed to raise');
-    }
-}
-
-async function handleMultiplayerCall() {
-    try {
-        const result = game.processBet(
-            appState.room,
-            appState.players,
-            appState.roundState,
-            appState.currentUser.playerId,
-            'call',
-            null
-        );
-
-        if (!result.success) {
-            ui.showToast(result.error);
-            return;
-        }
-
-        await persistence.applyEffects(result.effects);
-        await advanceMultiplayerBetting(appState.currentUser.playerId);
-        // State will update via subscription
-
-    } catch (error) {
-        console.error('Failed to call:', error);
-        ui.showToast('Failed to call');
-    }
-}
-
-async function handleMultiplayerAllIn() {
-    try {
-        const result = game.processBet(
-            appState.room,
-            appState.players,
-            appState.roundState,
-            appState.currentUser.playerId,
-            'all-in',
-            null
-        );
-
-        if (!result.success) {
-            ui.showToast(result.error);
-            return;
-        }
-
-        await persistence.applyEffects(result.effects);
-        await advanceMultiplayerBetting(appState.currentUser.playerId);
-        // State will update via subscription
-
-    } catch (error) {
-        console.error('Failed to go all-in:', error);
-        ui.showToast('Failed to go all-in');
-    }
-}
-
-async function handleMultiplayerFinalize() {
-    try {
-        const result = game.processBet(
-            appState.room,
-            appState.players,
-            appState.roundState,
-            appState.currentUser.playerId,
-            'finalize',
-            null
-        );
-
-        if (!result.success) {
-            ui.showToast(result.error);
-            return;
-        }
-
-        await persistence.applyEffects(result.effects);
-        await advanceMultiplayerBetting(appState.currentUser.playerId);
-        // State will update via subscription
-
-    } catch (error) {
-        console.error('Failed to finalize:', error);
-        ui.showToast('Failed to finalize');
-    }
-}
-
-async function handleMultiplayerCardClick(cardValue) {
-    try {
-        const result = game.processCardPlay(
-            appState.room,
-            appState.players,
-            appState.roundState,
-            appState.currentUser.playerId,
-            cardValue
-        );
-
-        if (!result.success) {
-            ui.showToast(result.error);
-            return;
-        }
-
-        await persistence.applyEffects(result.effects);
-        // State will update via subscription
-
-        if (result.bust) {
-            ui.addLogEntry(`You busted at ${result.total}!`, 'danger');
-            await handleMultiplayerBust(appState.currentUser.playerId);
-        }
-
-    } catch (error) {
-        console.error('Failed to play card:', error);
-        ui.showToast('Failed to play card');
-    }
-}
-
-// ==========================================
-// DATA LOADING & SUBSCRIPTIONS
-// ==========================================
-
-async function loadRoomData() {
-    appState.room = await supabaseClient.getRoom(appState.roomCode);
-    appState.players = await supabaseClient.getPlayers(appState.roomCode);
-}
-
-async function loadRoundState() {
-    appState.roundState = await supabaseClient.getRoundState(appState.roomCode);
-}
-
-async function loadMyHand() {
-    if (!appState.room || appState.room.current_round === 0) return;
-    
-    appState.myHand = await supabaseClient.getHandCards(
-        appState.roomCode,
-        appState.room.current_round,
-        appState.currentUser.playerId
-    );
-}
-
-/**
- * Load bot hands (host only, for controlling bots in multiplayer)
- */
-async function loadBotHands() {
-    if (!appState.isHost || !appState.room || appState.room.current_round === 0) return;
-    
-    const bots = appState.players.filter(p => p.is_bot);
-    appState.multiplayerBotHands = {};
-    
-    for (const bot of bots) {
-        const hand = await supabaseClient.getBotHandCards(
-            appState.roomCode,
-            appState.room.current_round,
-            bot.id
-        );
-        appState.multiplayerBotHands[bot.id] = hand;
-    }
-}
-
-// ===========================================
-//  MULTIPLAYER BOT RUNNER (Host Only)
-// ===========================================
-
-function startMultiplayerBotRunner() {
-    if (appState.botRunnerLock) return;
-    appState.botRunnerLock = setInterval(() => {
-        triggerBotTurn();
-    }, 1000); // Check every second
-}
-
-function stopMultiplayerBotRunner() {
-    if (appState.botRunnerLock) {
-        clearInterval(appState.botRunnerLock);
-        appState.botRunnerLock = null;
-    }
-}
-
-async function triggerBotTurn() {
-    if (!appState.isHost || !appState.roundState || !appState.room) return;
-
-    // Bot actions have a multi-second "thinking" delay, but triggerBotTurn
-    // is invoked both by a 1s interval and by every realtime subscription
-    // callback - without this guard the same bot's turn could be triggered
-    // and executed twice concurrently before the first persists.
-    if (appState.botTurnInProgress) return;
-
-    // phase and turn_player_id live on the room, not round_state
-    const phase = appState.room.phase;
-    const turnPlayerId = appState.room.turn_player_id;
-
-    if (!turnPlayerId) return;
-
-    const turnPlayer = appState.players.find(p => p.id === turnPlayerId);
-    if (!turnPlayer || !turnPlayer.is_bot) return; // Not a bot's turn
-
-    appState.botTurnInProgress = true;
-    try {
-        // Execute bot action based on phase
-        if (phase === 'betting') {
-            await executeBotBettingTurn(turnPlayer);
-        } else if (phase === 'playing') {
-            await executeBotPlayingTurn(turnPlayer);
-        }
-    } finally {
-        appState.botTurnInProgress = false;
-    }
-}
-
-async function executeBotBettingTurn(botPlayer) {
-    // Delay to simulate thinking
-    await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 1000));
-    
-    // Create AI player instance for decision making
-    const personality = extractBotPersonality(botPlayer.name);
-    const aiInstance = new ai.AIPlayer(botPlayer.id, botPlayer.name, personality, botPlayer.seat_index);
-    aiInstance.money_cents = botPlayer.money_cents;
-    
-    const gameState = game.getGameState(appState.room, appState.players, appState.roundState);
-    const decision = await ai.executeAIBet(aiInstance, gameState, appState.roundState);
-    
-    // Submit action through game logic
-    const result = game.processBet(
-        appState.room,
-        appState.players,
-        appState.roundState,
-        botPlayer.id,
-        decision.action === 'raise' ? 'bet' : decision.action,
-        decision.amount
-    );
-
-    if (!result.success) {
-        console.error('Bot betting failed:', result.error);
-        return;
-    }
-
-    await persistence.applyEffects(result.effects);
-
-    // Bots must explicitly finalize, same as offline AI mode - betting can't
-    // complete (isBettingComplete) until every active player's finalized_json
-    // is true, and a bet/call/all-in alone doesn't set that.
-    if (decision.shouldFinalize && decision.action !== 'finalize') {
-        await utils.sleep(300);
-        const finalizeResult = game.processBet(
-            appState.room,
-            appState.players,
-            appState.roundState,
-            botPlayer.id,
-            'finalize',
-            null
-        );
-        if (finalizeResult.success) {
-            await persistence.applyEffects(finalizeResult.effects);
-        }
-    }
-
-    await advanceMultiplayerBetting(botPlayer.id);
-}
-
-async function executeBotPlayingTurn(botPlayer) {
-    // Delay to simulate thinking
-    await new Promise(resolve => setTimeout(resolve, 800 + Math.random() * 1200));
-    
-    const botHand = appState.multiplayerBotHands[botPlayer.id] || [];
-    
-    if (botHand.length === 0) {
-        console.warn('Bot has no cards in hand');
-        return;
-    }
-    
-    // Create AI player instance with current hand
-    const personality = extractBotPersonality(botPlayer.name);
-    const aiInstance = new ai.AIPlayer(botPlayer.id, botPlayer.name, personality, botPlayer.seat_index);
-    aiInstance.money_cents = botPlayer.money_cents;
-    aiInstance.hand = botHand;
-    
-    const tableTotal = appState.room.table_total || 0;
-    const chosenCard = await ai.executeAICardPlay(aiInstance, tableTotal);
-    
-    // Show red border while bot is playing
-    ui.renderGameTable(
-        appState.players, 
-        appState.currentUser.playerId, 
-        appState.room.turn_player_id,
-        appState.roundState?.finalized_json || {},
-        botPlayer.id // Pass bot ID to show playing-card indicator
-    );
-    
-    // Submit card play through game logic
-    const result = game.processCardPlay(
-        appState.room,
-        appState.players,
-        appState.roundState,
-        botPlayer.id,
-        chosenCard
-    );
-
-    if (!result.success) {
-        console.error('Bot card play failed:', result.error);
-        return;
-    }
-
-    await persistence.applyEffects(result.effects);
-
-    // Remove card from cached hand
-    const cardIndex = botHand.indexOf(chosenCard);
-    if (cardIndex > -1) {
-        botHand.splice(cardIndex, 1);
-    }
-
-    ui.addLogEntry(`${botPlayer.name} played ${chosenCard} (total: ${result.total})`);
-
-    if (result.bust) {
-        ui.addLogEntry(`${botPlayer.name} busted at ${result.total}!`, 'danger');
-        await handleMultiplayerBust(botPlayer.id);
-    }
-}
-
-function extractBotPersonality(botName) {
-    if (botName.includes('Cautious')) return 'Cautious';
-    if (botName.includes('Aggressive')) return 'Aggressive';
-    return 'Balanced';
-}
-
-function subscribeToRoom() {
-    // Subscribe to room changes
-    const roomSub = supabaseClient.subscribeToRoom(appState.roomCode, async (payload) => {
-        console.log('Room update:', payload);
-        await loadRoomData();
-        
-        if (appState.room.status === 'in_game' && window.location.hash.includes('lobby')) {
-            // Game started
-            window.location.hash = '#/game';
-            await loadRoundState();
-            await loadMyHand();
-            if (appState.isHost) {
-                await loadBotHands();
-            }
-            ui.showScreen('game-screen');
-            ui.initGameScreen();
-            if (appState.isHost) {
-                startMultiplayerBotRunner();
-            }
-        }
-
-        if (appState.room.status === 'finished') {
-            // Someone else's action ended the game - show it here too.
-            // showGameOver is idempotent (just re-renders text), so it's
-            // safe to call on every update while status stays 'finished'.
-            const winner = game.checkGameOver(appState.players);
-            if (winner) {
-                if (appState.isHost) stopMultiplayerBotRunner();
-                ui.showGameOver(winner, appState.players);
-            }
-        }
-
-        // Trigger bot runner / bot position choice on room updates (phase/turn changes)
-        if (appState.isHost && appState.mode === 'multiplayer') {
-            triggerBotTurn();
-            maybeHandleBotPositionChoice();
-        }
-
-        updateGameUI();
-    });
-
-    // Subscribe to players
-    const playersSub = supabaseClient.subscribeToPlayers(appState.roomCode, async (payload) => {
-        console.log('Players update:', payload);
-        await loadRoomData();
-        updateGameUI();
-    });
-
-    // Subscribe to round state
-    const roundSub = supabaseClient.subscribeToRoundState(appState.roomCode, async (payload) => {
-        console.log('Round state update:', payload);
-        await loadRoundState();
-        if (appState.isHost) {
-            await loadBotHands();
-            triggerBotTurn();
-            maybeHandleBotPositionChoice();
-        }
-        updateGameUI();
-    });
-    
-    // Subscribe to hand cards
-    const handSub = supabaseClient.subscribeToHandCards(appState.roomCode, appState.currentUser.playerId, async (payload) => {
-        console.log('Hand update:', payload);
-        await loadMyHand();
-        updateGameUI();
-    });
-    
-    // Subscribe to actions (for log)
-    const actionsSub = supabaseClient.subscribeToActions(appState.roomCode, (payload) => {
-        if (payload.new) {
-            const action = payload.new;
-            const player = appState.players.find(p => p.id === action.actor_player_id);
-            const playerName = player ? player.name : 'System';
-            
-            if (action.type === 'raise') {
-                ui.addLogEntry(`${playerName} raised ${utils.formatMoney(action.payload.amount)}`);
-            } else if (action.type === 'call') {
-                ui.addLogEntry(`${playerName} called`);
-            } else if (action.type === 'play_card') {
-                ui.addLogEntry(`${playerName} played ${action.payload.cardValue} (total: ${action.payload.newTotal})`);
-                
-                if (action.payload.newTotal >= game.GAME_CONSTANTS.BUST_THRESHOLD) {
-                    ui.addLogEntry(`${playerName} busted!`, 'danger');
-                }
-            }
-        }
-    });
-    
-    appState.subscriptions = [roomSub, playersSub, roundSub, handSub, actionsSub];
-}
-
-async function rejoinRoom(roomCode) {
-    ui.showLoading('Rejoining room...');
-    
-    try {
-        const room = await supabaseClient.getRoom(roomCode);
-        if (!room) {
-            storage.clearRoomCode();
-            ui.showScreen('menu-screen');
-            return;
-        }
-        
-        appState.mode = 'multiplayer';
-        appState.roomCode = roomCode;
-        await loadRoomData();
-
-        const myPlayer = appState.players.find(p => p.id === appState.currentUser.playerId);
-        if (!myPlayer) {
-            storage.clearRoomCode();
-            ui.showScreen('menu-screen');
-            return;
-        }
-
-        appState.isHost = room.host_id === appState.currentUser.playerId;
-
-        subscribeToRoom();
-
-        if (room.status === 'lobby') {
-            ui.showScreen(appState.isHost ? 'create-screen' : 'lobby-screen');
-            ui.updateRoomCode(appState.isHost ? 'room-code-text' : 'lobby-room-code', roomCode);
-        } else if (room.status === 'in_game') {
-            await loadRoundState();
-            await loadMyHand();
-            if (appState.isHost) {
-                await loadBotHands();
-                startMultiplayerBotRunner(); // resume bot control after a host page refresh
-            }
-            ui.showScreen('game-screen');
-            ui.initGameScreen();
-            updateGameUI();
-        } else if (room.status === 'finished') {
-            const winner = game.checkGameOver(appState.players);
-            if (winner) {
-                ui.showGameOver(winner, appState.players);
-            } else {
+function handleServerMessage(data) {
+    switch (data.type) {
+        case 'state':
+            handleStateUpdate(data);
+            break;
+        case 'error':
+            if (data.reason === 'rejoin_failed') {
+                storage.clearRoomCode();
+                storage.clearSession();
                 ui.showScreen('menu-screen');
+            } else {
+                ui.showToast(data.message);
+            }
+            break;
+        default:
+            console.warn('Unhandled server message type:', data.type);
+    }
+}
+
+function handleStateUpdate(data) {
+    const previousRoundNo = appState.roundState?.round_no;
+    const previousLogLength = appState.roundState?.log_json?.length || 0;
+
+    appState.room = data.room;
+    appState.players = data.players;
+    appState.roundState = data.roundState;
+    appState.myHand = data.yourHand || [];
+    appState.isHost = data.isHost;
+    appState.roomCode = data.room.code;
+
+    storage.saveRoomCode(data.room.code);
+
+    if (data.room.status === 'lobby') {
+        window.location.hash = appState.isHost ? '#/create' : '#/lobby';
+        ui.showScreen(appState.isHost ? 'create-screen' : 'lobby-screen');
+        ui.updateRoomCode(appState.isHost ? 'room-code-text' : 'lobby-room-code', data.room.code);
+        ui.renderSeats(appState.isHost ? 'create-seats-list' : 'lobby-seats-list', appState.players, appState.currentUser.playerId);
+        ui.renderLobbyScreen(appState.room, appState.players, appState.currentUser.playerId, appState.isHost);
+        return;
+    }
+
+    if (data.room.status === 'in_game') {
+        window.location.hash = '#/game';
+        ui.showScreen('game-screen');
+
+        const isNewRound = data.roundState?.round_no !== previousRoundNo;
+        if (isNewRound) {
+            ui.initGameScreen();
+            ui.clearPlayedCards();
+        }
+
+        const newEntries = (data.roundState?.log_json || []).slice(isNewRound ? 0 : previousLogLength);
+        for (const entry of newEntries) {
+            const isDanger = entry.type === 'play_card' && entry.newTotal >= game.GAME_CONSTANTS.BUST_THRESHOLD;
+            const isHighlight = entry.type === 'round_start' || entry.type === 'round_end' || entry.type === 'play_order';
+            ui.addLogEntry(entry.message, isDanger ? 'danger' : (isHighlight ? 'highlight' : 'normal'));
+
+            if (entry.type === 'play_card') {
+                const p = appState.players.find(pl => pl.id === entry.playerId);
+                if (p) ui.showPlayedCard(p.seat_index, entry.cardValue);
             }
         }
 
-    } catch (error) {
-        console.error('Failed to rejoin room:', error);
-        storage.clearRoomCode();
-        ui.showScreen('menu-screen');
+        updateGameUI();
+        return;
+    }
+
+    if (data.room.status === 'finished') {
+        const winner = data.winner || game.checkGameOver(appState.players);
+        if (winner) {
+            ui.showGameOver(winner, appState.players);
+        }
     }
 }
 
@@ -1762,22 +1081,6 @@ function updateGameUI() {
         ui.hideEarningsBreakdown();
     }
 }
-
-// ==========================================
-// HEARTBEAT (for multiplayer)
-// ==========================================
-
-setInterval(async () => {
-    if (appState.roomCode && appState.mode !== 'ai') {
-        try {
-            await supabaseClient.updatePlayer(appState.currentUser.playerId, {
-                last_seen: new Date().toISOString()
-            });
-        } catch (error) {
-            // Ignore heartbeat errors
-        }
-    }
-}, 10000); // Every 10 seconds
 
 // Start the app
 init();

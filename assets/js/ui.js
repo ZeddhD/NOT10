@@ -727,7 +727,8 @@ export function showHelpModal() {
  */
 export function renderLobbyScreen(room, players, currentPlayerId, isHost) {
     const readyPlayers = players.filter(p => p.is_ready);
-    const canStart = readyPlayers.length >= 2 && isHost;
+    // Solo play is allowed - missing seats auto-fill with bots on start
+    const canStart = readyPlayers.length >= 1 && isHost;
     
     // Update start button visibility
     if (isHost) {

@@ -180,6 +180,13 @@ describe('game.processBet', () => {
         expect(players.find(p => p.id === 'p2').money_cents).toBe(game.GAME_CONSTANTS.STARTING_MONEY - 50000);
     });
 
+    it('a regular bet that empties the stack auto-finalizes too, not just ALL-IN', () => {
+        players[0].money_cents = 10000; // exactly $100
+        game.processBet(room, players, roundState, 'p1', 'bet', 10000);
+        expect(players[0].money_cents).toBe(0);
+        expect(roundState.finalized_json['p1']).toBe(true);
+    });
+
     it('call auto-finalizes - there is no further action left to take', () => {
         game.processBet(room, players, roundState, 'p1', 'bet', 50000);
         game.processBet(room, players, roundState, 'p2', 'call', null);

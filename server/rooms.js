@@ -22,9 +22,13 @@ const TURN_TICK_MS = 1000;
 const BOT_PERSONALITIES = ['cautious', 'balanced', 'aggressive'];
 const FALLBACK_PERSONALITY = 'cautious'; // used to auto-pilot a disconnected human
 
+// Matches the personality descriptions in the in-app help modal (Carl the
+// cautious bot, Betty the balanced bot, Alex the aggressive bot) so a
+// player who reads "how to play" recognizes the names at the table.
+const BOT_NAMES = { cautious: 'Carl', balanced: 'Betty', aggressive: 'Alex' };
+
 function botName(personality) {
-    const label = personality.charAt(0).toUpperCase() + personality.slice(1);
-    return `BOT ${label}`;
+    return BOT_NAMES[personality] || 'Bot';
 }
 
 class Room {

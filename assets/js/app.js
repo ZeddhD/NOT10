@@ -8,11 +8,12 @@ import * as utils from './utils.js';
 import * as storage from './storage.js';
 import * as wsClient from './wsClient.js';
 import * as game from '../../engine/game.js';
-import * as ai from '../../engine/ai.js';
 
-// Global app state
+// Global app state. There is only one game mode now - the server is always
+// authoritative. "Play vs AI" is just a shortcut that creates a room and
+// auto-starts it solo (see autoStartSolo below); it is not a separate
+// client-side game engine.
 const appState = {
-    mode: null, // 'multiplayer' or 'ai'
     currentUser: {
         playerId: null,
         name: null
@@ -23,8 +24,14 @@ const appState = {
     players: [],
     roundState: null,
     myHand: [],
-    aiPlayers: [],
-    aiLoopInterval: null
+    // When true, every time this client lands in a 'lobby' room it
+    // immediately readies up and starts the game itself instead of
+    // showing the lobby screen - this is what makes "Play vs AI" behave
+    // exactly like a host who created a lobby alone and let it auto-fill
+    // with bots, minus the lobby screen. Persists across "Play Again" so
+    // a rematch also auto-starts; cleared on Leave.
+    autoStartSolo: false,
+    autoStartSent: false
 };
 
 // Initialize app
@@ -61,7 +68,7 @@ function init() {
  */
 function handleSocketOpen() {
     const savedRoomCode = storage.getRoomCode();
-    if (savedRoomCode && appState.mode !== 'ai') {
+    if (savedRoomCode) {
         wsClient.send({ type: 'rejoin', playerId: appState.currentUser.playerId, roomCode: savedRoomCode });
     }
 }
@@ -108,45 +115,38 @@ function setupEventListeners() {
     document.querySelectorAll('.btn-bet').forEach(btn => {
         btn.addEventListener('click', () => {
             const amount = parseInt(btn.dataset.amount) * 100; // Convert to cents
-            handleRaise(amount);
+            handleMultiplayerRaise(amount);
         });
     });
-    document.getElementById('call-btn')?.addEventListener('click', handleCall);
-    
+    document.getElementById('call-btn')?.addEventListener('click', handleMultiplayerCall);
+
     // Finalize button
-    document.getElementById('finalize-btn')?.addEventListener('click', handleFinalize);
-    
+    document.getElementById('finalize-btn')?.addEventListener('click', handleMultiplayerFinalize);
+
     // All-in button
     document.getElementById('all-in-btn')?.addEventListener('click', () => {
         const myPlayer = appState.players.find(p => p.id === appState.currentUser.playerId);
         if (myPlayer && myPlayer.money_cents > 0) {
-            handleAllIn();
+            handleMultiplayerAllIn();
         }
     });
-    
+
     // Position choice buttons
-    document.getElementById('choose-first-btn')?.addEventListener('click', () => handlePositionChoice('first'));
-    document.getElementById('choose-last-btn')?.addEventListener('click', () => handlePositionChoice('last'));
-    
-    // Game over screen
+    document.getElementById('choose-first-btn')?.addEventListener('click', () => handleMultiplayerPositionChoice('first'));
+    document.getElementById('choose-last-btn')?.addEventListener('click', () => handleMultiplayerPositionChoice('last'));
+
+    // Game over screen - always server-driven now, so both buttons just
+    // send an intent and let the next 'state' broadcast update the UI.
     document.getElementById('play-again-btn')?.addEventListener('click', () => {
-        if (appState.mode === 'multiplayer') {
-            // Rematch in the same room/lobby (host-only server-side; a
-            // non-host tap just gets a toast telling them to wait for the host).
-            handlePlayAgain();
-        } else {
-            window.location.hash = '#/menu';
-            window.location.reload();
+        // If this was a solo AI game, re-arm the auto-start so the rematch
+        // also skips straight past the lobby screen instead of stopping
+        // there with just one seat filled.
+        if (appState.autoStartSolo) {
+            appState.autoStartSent = false;
         }
+        handlePlayAgain();
     });
-    document.getElementById('back-to-menu-btn')?.addEventListener('click', () => {
-        if (appState.mode === 'multiplayer') {
-            handleLeaveRoom();
-        } else {
-            window.location.hash = '#/menu';
-            window.location.reload();
-        }
-    });
+    document.getElementById('back-to-menu-btn')?.addEventListener('click', handleLeaveRoom);
 }
 
 // Routing
@@ -171,7 +171,7 @@ function handleRoute() {
 
 function handleCreateLobby() {
     const playerName = appState.currentUser.name || 'Player';
-    appState.mode = 'multiplayer';
+    appState.autoStartSolo = false;
     storage.savePlayerName(playerName);
 
     ui.showLoading('Creating lobby...');
@@ -201,7 +201,7 @@ function handleJoinRoom() {
     ui.hideError('join-error');
     ui.showLoading('Joining room...');
 
-    appState.mode = 'multiplayer';
+    appState.autoStartSolo = false;
     appState.currentUser.name = name;
     storage.savePlayerName(name);
 
@@ -240,617 +240,42 @@ function handleLeaveRoom() {
     appState.players = [];
     appState.roundState = null;
     appState.myHand = [];
+    appState.autoStartSolo = false;
+    appState.autoStartSent = false;
 
     window.location.hash = '#/menu';
     ui.showScreen('menu-screen');
 }
 
-// ==========================================
-// AI MODE HANDLERS
-// ==========================================
+/**
+ * "Play vs AI" - identical to a host creating a lobby alone and letting it
+ * auto-fill with 3 bots, minus ever showing the lobby screen: this just
+ * creates a room and arms autoStartSolo, which makes handleStateUpdate
+ * auto-ready-and-start the moment the (single-player) lobby state arrives.
+ */
+function handlePlayAI() {
+    const playerName = appState.currentUser.name || 'Player';
+    appState.autoStartSolo = true;
+    appState.autoStartSent = false;
+    storage.savePlayerName(playerName);
 
-async function handlePlayAI() {
-    console.log('Play AI clicked');
-    ui.showLoading('Setting up AI game...');
-    console.log('Loading screen shown');
-    appState.mode = 'ai';
-    
-    // Create human player
-    const humanName = appState.currentUser.name || 'You';
-    const humanPlayer = {
-        id: appState.currentUser.playerId,
-        name: humanName,
-        seat_index: 0,
-        money_cents: game.GAME_CONSTANTS.STARTING_MONEY,
-        status: 'active',
-        is_ready: true
-    };
-    
-    // Create AI players
-    appState.aiPlayers = ai.createAIPlayers(3);
-    
-    // Combine all players
-    appState.players = [humanPlayer, ...appState.aiPlayers];
-    
-    // Create mock room with random starting player
-    const randomStartingPlayer = Math.floor(Math.random() * 4); // Random player 0-3
-    appState.room = {
-        code: 'AI-GAME',
-        status: 'in_game',
-        current_round: 0,
-        starting_player_index: randomStartingPlayer,
-        pot_cents: 0,
-        table_total: 0,
-        phase: 'betting',
-        turn_player_id: humanPlayer.id
-    };
-    
-    appState.roomCode = 'AI-GAME';
-    
-    console.log('Starting AI round');
-    // Start AI game
-    await startAIRound();
-}
-
-async function startAIRound() {
-    console.log('Starting AI round - switching to game screen');
-    ui.showScreen('game-screen');
-    console.log('Game screen shown, initializing');
-    ui.initGameScreen();
-    console.log('Game screen initialized, sleeping');
-    
-    await utils.sleep(500);
-    console.log('Sleep done, starting new round');
-    
-    // Start new round
-    const result = game.startNewRound(appState.room, appState.players);
-
-    if (result.gameOver) {
-        ui.showGameOver(result.winner, appState.players);
-        return;
-    }
-
-    // Clear played card displays
-    ui.clearPlayedCards();
-    
-    // Set hands
-    for (const player of appState.players) {
-        if (result.hands[player.id]) {
-            if (player.id === appState.currentUser.playerId) {
-                appState.myHand = result.hands[player.id];
-            } else {
-                // AI player
-                const aiPlayer = appState.aiPlayers.find(ai => ai.id === player.id);
-                if (aiPlayer) {
-                    aiPlayer.setHand(result.hands[player.id]);
-                }
-            }
-        }
-    }
-    
-    // Initialize round state
-    appState.roundState = {
-        round_no: result.round,
-        bets_json: {},
-        has_raised_json: {},
-        bet_action_count_json: {},
-        finalized_json: {},
-        played_count: 0,
-        log_json: []
-    };
-    
-    // Update room state for AI mode
-    appState.room.current_round = result.round;
-    appState.room.phase = 'betting';
-    appState.room.turn_player_id = result.startingPlayer.id;
-    appState.room.table_total = 0;
-    
-    // Update UI
-    updateGameUI();
-    ui.addLogEntry(`Round ${result.round} started`, 'highlight');
-    
-    // Start AI game loop
-    startAIGameLoop();
-}
-
-function startAIGameLoop() {
-    // Clear any existing loop
-    if (appState.aiLoopInterval) {
-        clearInterval(appState.aiLoopInterval);
-    }
-    
-    // Add a processing flag to prevent multiple simultaneous AI turns
-    let isProcessing = false;
-    
-    // Check game state periodically
-    appState.aiLoopInterval = setInterval(async () => {
-        if (!isProcessing) {
-            isProcessing = true;
-            await processAITurn();
-            isProcessing = false;
-        }
-    }, 500); // Increased from 100ms to 500ms for better pacing
-}
-
-async function processAITurn() {
-    if (appState.room.phase === 'betting') {
-        const currentPlayer = appState.players.find(p => p.id === appState.room.turn_player_id);
-        if (!currentPlayer || currentPlayer.status !== 'active') return;
-        
-        // If it's AI's turn
-        if (currentPlayer.id !== appState.currentUser.playerId) {
-            const aiPlayer = appState.aiPlayers.find(ai => ai.id === currentPlayer.id);
-            if (aiPlayer) {
-                await executeAIBetTurn(aiPlayer);
-            }
-        }
-        
-    } else if (appState.room.phase === 'playing') {
-        const currentPlayer = appState.players.find(p => p.id === appState.room.turn_player_id);
-        if (!currentPlayer || currentPlayer.status !== 'active') return;
-        
-        // If it's AI's turn
-        if (currentPlayer.id !== appState.currentUser.playerId) {
-            const aiPlayer = appState.aiPlayers.find(ai => ai.id === currentPlayer.id);
-            if (aiPlayer) {
-                await executeAIPlayTurn(aiPlayer);
-            }
-        }
-    }
-}
-
-async function executeAIBetTurn(aiPlayer) {
-    // Add delay before AI acts to make it feel natural
-    await utils.sleep(1000 + Math.random() * 1500);
-    
-    const gameState = game.getGameState(appState.room, appState.players, appState.roundState);
-    const decision = await ai.executeAIBet(aiPlayer, gameState, appState.roundState);
-    
-    const result = game.processBet(
-        appState.room,
-        appState.players,
-        appState.roundState,
-        aiPlayer.id,
-        decision.action === 'raise' ? 'bet' : decision.action,
-        decision.amount
-    );
-
-    if (result.success) {
-        if (result.action === 'raise') {
-            ui.addLogEntry(`${aiPlayer.name} raised to ${utils.formatMoney(result.newTotal)}`);
-        } else if (result.action === 'bet') {
-            ui.addLogEntry(`${aiPlayer.name} bet ${utils.formatMoney(decision.amount)}`);
-        } else if (result.action === 'all-in') {
-            ui.addLogEntry(`${aiPlayer.name} went ALL-IN ${utils.formatMoney(decision.amount)}!`, 'highlight');
-        } else if (result.action === 'finalize') {
-            ui.addLogEntry(`${aiPlayer.name} finalized bet`);
-        } else {
-            ui.addLogEntry(`${aiPlayer.name} called ${utils.formatMoney(result.amount)}`);
-        }
-        
-        updateGameUI();
-        
-        // AI decides whether to finalize based on strategy (only if not already finalized)
-        if (decision.shouldFinalize && decision.action !== 'finalize') {
-            await utils.sleep(300);
-            const finalizeResult = game.processBet(
-                appState.room,
-                appState.players,
-                appState.roundState,
-                aiPlayer.id,
-                'finalize',
-                null
-            );
-
-            if (finalizeResult.success) {
-                ui.addLogEntry(`${aiPlayer.name} finalized bet`);
-                updateGameUI();
-            }
-        }
-        
-        // Check if betting is complete
-        const activePlayers = appState.players.filter(p => p.status === 'active');
-        if (game.isBettingComplete(activePlayers, appState.roundState.finalized_json)) {
-            const transitionResult = game.transitionToPlaying(appState.room, activePlayers, appState.roundState);
-            
-            if (transitionResult.needsPositionChoice) {
-                await handleAIPositionChoice(transitionResult);
-            } else {
-                updateGameUI();
-                ui.addLogEntry('Playing phase started', 'highlight');
-            }
-        } else {
-            // Next player's turn for betting
-            const nextPlayer = game.getNextBettingPlayer(activePlayers, aiPlayer.seat_index, appState.roundState.finalized_json);
-            if (nextPlayer) {
-                appState.room.turn_player_id = nextPlayer.id;
-                updateGameUI();
-            }
-        }
-    }
-}
-
-async function executeAIPlayTurn(aiPlayer) {
-    // Add delay before AI acts to make it feel natural
-    await utils.sleep(800 + Math.random() * 1200);
-    
-    const cardToPlay = await ai.executeAICardPlay(aiPlayer, appState.room.table_total);
-    
-    // Show red border while AI is playing card
-    ui.renderGameTable(
-        appState.players, 
-        appState.currentUser.playerId, 
-        appState.room.turn_player_id,
-        appState.roundState?.finalized_json || {},
-        aiPlayer.id // Pass AI player ID to show playing-card indicator
-    );
-    
-    const result = game.processCardPlay(
-        appState.room,
-        appState.players,
-        appState.roundState,
-        aiPlayer.id,
-        cardToPlay
-    );
-    
-    if (result.success) {
-        aiPlayer.removeCard(cardToPlay);
-        ui.showPlayedCard(aiPlayer.seat_index, cardToPlay, result.bust);
-        ui.addLogEntry(`${aiPlayer.name} played ${cardToPlay} (total: ${result.total})`);
-        updateGameUI();
-        
-        if (result.bust) {
-            ui.addLogEntry(`${aiPlayer.name} busted at ${result.total}!`, 'danger');
-            await handleAIRoundEnd(aiPlayer.id);
-        }
-    }
-}
-
-async function handleAIRoundEnd(eliminatedPlayerId) {
-    await utils.sleep(1500);
-    
-    game.endRound(appState.room, appState.players, appState.roundState, eliminatedPlayerId);
-    
-    ui.addLogEntry('Round ended', 'highlight');
-    updateGameUI();
-    
-    // Check game over
-    const winner = game.checkGameOver(appState.players);
-    if (winner) {
-        clearInterval(appState.aiLoopInterval);
-        await utils.sleep(2000);
-        ui.showGameOver(winner, appState.players);
-    } else {
-        await utils.sleep(2000);
-        await startAIRound();
-    }
-}
-
-// Handle AI position choice
-async function handleAIPositionChoice(transitionResult) {
-    const aiPlayer = appState.aiPlayers.find(ai => ai.id === transitionResult.highestBettorId);
-    
-    if (aiPlayer) {
-        // Show AI is thinking
-        ui.addLogEntry(`${aiPlayer.name} is choosing position...`);
-        await utils.sleep(1000 + Math.random() * 1500);
-        
-        // AI makes choice based on hand
-        const choice = ai.choosePosition(aiPlayer, appState.room.table_total || 0);
-        
-        // Apply choice
-        const activePlayers = appState.players.filter(p => p.status === 'active');
-        game.applyPositionChoice(appState.room, activePlayers, appState.roundState, choice);
-
-        updateGameUI();
-        ui.addLogEntry('Playing phase started', 'highlight');
-    }
-}
-
-// Handle human player position choice
-async function handlePositionChoice(choice) {
-    if (appState.mode === 'ai') {
-        const activePlayers = appState.players.filter(p => p.status === 'active');
-        game.applyPositionChoice(appState.room, activePlayers, appState.roundState, choice);
-    } else {
-        handleMultiplayerPositionChoice(choice);
-        return; // the server's 'state' broadcast drives the UI update, not this client
-    }
-
-    updateGameUI();
-    ui.addLogEntry('Playing phase started', 'highlight');
+    ui.showLoading('Setting up your table...');
+    wsClient.send({ type: 'create_room', playerId: appState.currentUser.playerId, name: playerName });
 }
 
 // ==========================================
-// HUMAN PLAYER ACTIONS (AI MODE)
-// ==========================================
-
-async function handleRaise(amount) {
-    if (appState.mode === 'ai') {
-        await handleAIRaise(amount);
-    } else {
-        await handleMultiplayerRaise(amount);
-    }
-}
-
-async function handleCall() {
-    if (appState.mode === 'ai') {
-        await handleAICall();
-    } else {
-        await handleMultiplayerCall();
-    }
-}
-
-async function handleAIRaise(amount) {
-    const result = game.processBet(
-        appState.room,
-        appState.players,
-        appState.roundState,
-        appState.currentUser.playerId,
-        'bet',
-        amount
-    );
-    
-    if (!result.success) {
-        ui.showToast(result.error);
-        return;
-    }
-    
-    ui.addLogEntry(result.action === 'raise' ? `You raised to ${utils.formatMoney(result.newTotal)}` : `You bet ${utils.formatMoney(amount)}`);
-    updateGameUI();
-    
-    // Check if betting is complete
-    const activePlayers = appState.players.filter(p => p.status === 'active');
-    if (game.isBettingComplete(activePlayers, appState.roundState.finalized_json)) {
-        const transitionResult = game.transitionToPlaying(appState.room, activePlayers, appState.roundState);
-        
-        if (transitionResult.needsPositionChoice) {
-            if (transitionResult.highestBettorId === appState.currentUser.playerId) {
-                // Human player gets to choose
-                ui.showPositionChoice(true, transitionResult.highestBet);
-                updateGameUI();
-            } else {
-                // AI player chooses
-                await handleAIPositionChoice(transitionResult);
-            }
-        } else {
-            updateGameUI();
-            ui.addLogEntry('Playing phase started', 'highlight');
-        }
-    } else {
-        // Next player's turn
-        const humanPlayer = appState.players.find(p => p.id === appState.currentUser.playerId);
-        const nextPlayer = game.getNextBettingPlayer(activePlayers, humanPlayer.seat_index, appState.roundState.finalized_json);
-        if (nextPlayer) {
-            appState.room.turn_player_id = nextPlayer.id;
-            updateGameUI();
-        }
-    }
-}
-
-async function handleAllIn() {
-    if (appState.mode === 'ai') {
-        await handleAIAllIn();
-    } else {
-        await handleMultiplayerAllIn();
-    }
-}
-
-async function handleAIAllIn() {
-    const result = game.processBet(
-        appState.room,
-        appState.players,
-        appState.roundState,
-        appState.currentUser.playerId,
-        'all-in',
-        null
-    );
-    
-    if (!result.success) {
-        ui.showToast(result.error);
-        return;
-    }
-    
-    ui.addLogEntry(`You went ALL-IN ${utils.formatMoney(result.amount)}!`, 'highlight');
-    updateGameUI();
-    
-    // Check if betting is complete
-    const activePlayers = appState.players.filter(p => p.status === 'active');
-    if (game.isBettingComplete(activePlayers, appState.roundState.finalized_json)) {
-        const transitionResult = game.transitionToPlaying(appState.room, activePlayers, appState.roundState);
-        
-        if (transitionResult.needsPositionChoice) {
-            if (transitionResult.highestBettorId === appState.currentUser.playerId) {
-                // Human player gets to choose
-                ui.showPositionChoice(true, transitionResult.highestBet);
-                updateGameUI();
-            } else {
-                // AI player chooses
-                await handleAIPositionChoice(transitionResult);
-            }
-        } else {
-            updateGameUI();
-            ui.addLogEntry('Playing phase started', 'highlight');
-        }
-    } else {
-        // Next player's turn
-        const humanPlayer = appState.players.find(p => p.id === appState.currentUser.playerId);
-        const nextPlayer = game.getNextBettingPlayer(activePlayers, humanPlayer.seat_index, appState.roundState.finalized_json);
-        if (nextPlayer) {
-            appState.room.turn_player_id = nextPlayer.id;
-            updateGameUI();
-        }
-    }
-}
-
-async function handleAICall() {
-    const result = game.processBet(
-        appState.room,
-        appState.players,
-        appState.roundState,
-        appState.currentUser.playerId,
-        'call',
-        null
-    );
-    
-    if (!result.success) {
-        ui.showToast(result.error);
-        return;
-    }
-    
-    ui.addLogEntry('You called');
-    updateGameUI();
-    
-    // Check if betting is complete
-    const activePlayers = appState.players.filter(p => p.status === 'active');
-    if (game.isBettingComplete(activePlayers, appState.roundState.finalized_json)) {
-        const transitionResult = game.transitionToPlaying(appState.room, activePlayers, appState.roundState);
-        
-        if (transitionResult.needsPositionChoice) {
-            if (transitionResult.highestBettorId === appState.currentUser.playerId) {
-                // Human player gets to choose
-                ui.showPositionChoice(true, transitionResult.highestBet);
-                updateGameUI();
-            } else {
-                // AI player chooses
-                await handleAIPositionChoice(transitionResult);
-            }
-        } else {
-            updateGameUI();
-            ui.addLogEntry('Playing phase started', 'highlight');
-        }
-    } else {
-        // Next player's turn
-        const humanPlayer = appState.players.find(p => p.id === appState.currentUser.playerId);
-        const nextPlayer = game.getNextBettingPlayer(activePlayers, humanPlayer.seat_index, appState.roundState.finalized_json);
-        if (nextPlayer) {
-            appState.room.turn_player_id = nextPlayer.id;
-            updateGameUI();
-        }
-    }
-}
-
-async function handleFinalize() {
-    if (appState.mode === 'ai') {
-        await handleAIFinalize();
-    } else {
-        await handleMultiplayerFinalize();
-    }
-}
-
-async function handleAIFinalize() {
-    const result = game.processBet(
-        appState.room,
-        appState.players,
-        appState.roundState,
-        appState.currentUser.playerId,
-        'finalize',
-        null
-    );
-    
-    if (!result.success) {
-        ui.showToast(result.error);
-        return;
-    }
-    
-    ui.addLogEntry(`You finalized bet at ${utils.formatMoney(result.amount)}`);
-    updateGameUI();
-    
-    // Check if betting is complete
-    const activePlayers = appState.players.filter(p => p.status === 'active');
-    if (game.isBettingComplete(activePlayers, appState.roundState.finalized_json)) {
-        const transitionResult = game.transitionToPlaying(appState.room, activePlayers, appState.roundState);
-        
-        if (transitionResult.needsPositionChoice) {
-            if (transitionResult.highestBettorId === appState.currentUser.playerId) {
-                // Human player gets to choose
-                ui.showPositionChoice(true, transitionResult.highestBet);
-                updateGameUI();
-            } else {
-                // AI player chooses
-                await handleAIPositionChoice(transitionResult);
-            }
-        } else {
-            updateGameUI();
-            ui.addLogEntry('Playing phase started', 'highlight');
-        }
-    } else {
-        // Next player's turn
-        const humanPlayer = appState.players.find(p => p.id === appState.currentUser.playerId);
-        const nextPlayer = game.getNextBettingPlayer(activePlayers, humanPlayer.seat_index, appState.roundState.finalized_json);
-        if (nextPlayer) {
-            appState.room.turn_player_id = nextPlayer.id;
-            updateGameUI();
-        }
-    }
-}
-
-async function handleCardClick(cardValue) {
-    if (appState.mode === 'ai') {
-        await handleAICardClick(cardValue);
-    } else {
-        await handleMultiplayerCardClick(cardValue);
-    }
-}
-
-async function handleAICardClick(cardValue) {
-    const myPlayer = appState.players.find(p => p.id === appState.currentUser.playerId);
-    
-    // Show red border while player is playing card
-    ui.renderGameTable(
-        appState.players, 
-        appState.currentUser.playerId, 
-        appState.room.turn_player_id,
-        appState.roundState?.finalized_json || {},
-        appState.currentUser.playerId // Show playing-card indicator for human player
-    );
-    
-    const result = game.processCardPlay(
-        appState.room,
-        appState.players,
-        appState.roundState,
-        appState.currentUser.playerId,
-        cardValue
-    );
-    
-    if (!result.success) {
-        ui.showToast(result.error);
-        return;
-    }
-    
-    // Remove card from hand
-    const index = appState.myHand.indexOf(cardValue);
-    if (index > -1) {
-        appState.myHand.splice(index, 1);
-    }
-    
-    if (myPlayer) {
-        ui.showPlayedCard(myPlayer.seat_index, cardValue, result.bust);
-    }
-    ui.addLogEntry(`You played ${cardValue} (total: ${result.total})`);
-    updateGameUI();
-    
-    if (result.bust) {
-        ui.addLogEntry(`You busted at ${result.total}!`, 'danger');
-        await handleAIRoundEnd(appState.currentUser.playerId);
-    }
-}
-
-
-// ==========================================
-// MULTIPLAYER (WebSocket-driven)
+// GAME ACTIONS (WebSocket-driven)
 // ==========================================
 //
-// Unlike the AI-mode section above, there is almost no logic here: the
-// server (server/rooms.js) is authoritative for turn advancement, bot
-// control, and round-end handling. This client only sends intents and
-// re-renders whenever a 'state' broadcast arrives (handleServerMessage).
-// Design trade-off worth knowing: because every update is a full
-// snapshot rather than a granular per-action event, the "still deciding"
-// pulsing indicator AI mode shows while a bot is mid-turn doesn't have an
-// equivalent here - you only see a bot's move once it's already resolved.
-// Whose turn it is right now is still shown via the normal active-turn
-// highlight on their player panel.
+// There is almost no logic here: the server (server/rooms.js) is
+// authoritative for turn advancement, bot control, and round-end handling
+// (including for "Play vs AI" - it's just a solo room like any other).
+// This client only sends intents and re-renders whenever a 'state'
+// broadcast arrives (handleServerMessage). Design trade-off worth knowing:
+// because every update is a full snapshot rather than a granular
+// per-action event, you only see a bot's move once it's already resolved -
+// whose turn it is right now is shown via the active-turn highlight on
+// their player panel.
 
 function handleMultiplayerRaise(amount) {
     wsClient.send({ type: 'bet', action: 'bet', amount });
@@ -916,6 +341,19 @@ function handleStateUpdate(data) {
     storage.saveRoomCode(data.room.code);
 
     if (data.room.status === 'lobby') {
+        // "Play vs AI" shortcut: skip the lobby screen entirely and
+        // auto-ready + auto-start, exactly as if a host had created a
+        // lobby alone and started it with no one else joining (server
+        // auto-fills the other 3 seats with bots either way). Guarded by
+        // autoStartSent so the ready-ack's own 'lobby' broadcast doesn't
+        // trigger a second start_game.
+        if (appState.autoStartSolo && appState.isHost && !appState.autoStartSent) {
+            appState.autoStartSent = true;
+            wsClient.send({ type: 'set_ready', ready: true });
+            wsClient.send({ type: 'start_game' });
+            return;
+        }
+
         window.location.hash = '#/lobby';
         ui.showScreen('lobby-screen');
         ui.updateRoomCode('lobby-room-code', data.room.code);
@@ -1063,7 +501,7 @@ function updateGameUI() {
         } else {
             ui.hideAllControls();
             ui.showPlayingControls(true);
-            ui.renderHand(appState.myHand, isMyTurn, handleCardClick);
+            ui.renderHand(appState.myHand, isMyTurn, handleMultiplayerCardClick);
             
             // Show potential earnings breakdown
             if (appState.roundState && appState.roundState.bets_json) {

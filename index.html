@@ -267,7 +267,7 @@
 
                             <div id="spectator-notice" class="controls-section hidden">
                                 <div class="spectator-message">
-                                    <h3>👻 Spectating</h3>
+                                    <h3><span class="icon-ghost" aria-hidden="true"></span> Spectating</h3>
                                     <p>You're out of money. Watch the remaining players battle it out!</p>
                                 </div>
                             </div>
@@ -275,16 +275,14 @@
                             <!-- Position Choice Controls -->
                             <div id="position-choice-controls" class="controls-section hidden">
                                 <div class="position-choice-container">
-                                    <h3>🎯 You bet the most!</h3>
+                                    <h3>You bet the most!</h3>
                                     <p id="position-choice-message">Choose your play order position:</p>
                                     <div class="position-buttons">
                                         <button id="choose-first-btn" class="btn-primary">
-                                            <span class="btn-icon">⚡</span>
                                             <span class="btn-text">GO FIRST</span>
                                             <span class="btn-hint">Apply pressure early</span>
                                         </button>
                                         <button id="choose-last-btn" class="btn-primary">
-                                            <span class="btn-icon">🎯</span>
                                             <span class="btn-text">GO LAST</span>
                                             <span class="btn-hint">See all cards first</span>
                                         </button>
@@ -349,18 +347,18 @@
                     <button id="close-help-btn" class="btn-close">×</button>
                 </div>
                 <div class="modal-body">
-                    <h3>🎯 Objective</h3>
+                    <h3>Objective</h3>
                     <p>Be the last player with money. Avoid being the one to push the table total to 10 or higher.</p>
-                    
-                    <h3>⚙️ Setup</h3>
+
+                    <h3>Setup</h3>
                     <ul>
                         <li>2-4 players start with <strong>$1,000</strong> each</li>
                         <li>40-card deck: 10 cards each of values <strong>0, 1, 2, 3</strong></li>
                         <li>Cards dealt: <strong>4 cards</strong> (3-4 players) or <strong>6 cards</strong> (2 players)</li>
                         <li>Starting player chosen randomly, then rotates clockwise</li>
                     </ul>
-                    
-                    <h3>💰 Betting Rules</h3>
+
+                    <h3>Betting Rules</h3>
                     <ul>
                         <li><strong>Minimum bet: $100</strong> (or all-in if you have less)</li>
                         <li>If you have <strong>less than $100</strong>, you MUST go all-in</li>
@@ -372,32 +370,32 @@
                         <li><strong>FINALIZE</strong> locks your bet (only available after betting once)</li>
                         <li>Round starts when <strong>ALL players finalize</strong></li>
                     </ul>
-                    
-                    <h3>🃏 Playing Cards</h3>
+
+                    <h3>Playing Cards</h3>
                     <ul>
                         <li>Players take turns <strong>clockwise</strong> playing one card</li>
                         <li>Table total <strong>increases</strong> by the card's value</li>
                         <li>Card colors: <strong>0=White, 1=Green, 2=Blue, 3=Red</strong></li>
-                        <li>If total reaches <strong>10 or higher</strong> after YOUR card → You're <strong>ELIMINATED</strong></li>
+                        <li>If total reaches <strong>10 or higher</strong> after YOUR card &rarr; You're <strong>ELIMINATED</strong></li>
                         <li>Only one player eliminated per round</li>
                     </ul>
-                    
-                    <h3>🏆 Pot Distribution & Play Order</h3>
+
+                    <h3>Pot Distribution &amp; Play Order</h3>
                     <ul>
-                        <li><strong>⚡ WEIGHTED POT</strong>: Share proportional to your bet amount!</li>
+                        <li><strong>WEIGHTED POT</strong>: Share proportional to your bet amount!</li>
                         <li><strong>Formula</strong>: Your Share = (Your Bet ÷ Survivor Bets) × Pot</li>
                         <li><strong>Example</strong>: Bet $500, others bet $100 each → You get 50%+ of pot!</li>
                         <li><strong>Big bets = BIG rewards</strong> if you survive (but big losses if you bust)</li>
                         <li><strong>Small bets = Small rewards</strong> (safe but less profit)</li>
-                        <li><strong>🎯 HIGHEST BETTOR CHOOSES POSITION</strong> = Go FIRST or LAST!</li>
+                        <li><strong>HIGHEST BETTOR CHOOSES POSITION</strong> = Go FIRST or LAST!</li>
                         <li><strong>GO FIRST</strong>: Apply pressure, show strength (best with low cards)</li>
                         <li><strong>GO LAST</strong>: See all cards first, perfect info (best with risky cards)</li>
                         <li>Eliminated player gets $0</li>
                         <li>If your money reaches $0 → Spectator</li>
                         <li>Game ends when one player has all the money</li>
                     </ul>
-                    
-                    <h3>💡 Strategic Implications</h3>
+
+                    <h3>Strategic Implications</h3>
                     <ul>
                         <li><strong>Strong hand (0s, 1s)</strong>: BET BIG! Get huge pot share + choose FIRST to intimidate</li>
                         <li><strong>Weak hand (2s, 3s)</strong>: Bet big to choose LAST position = see all cards</li>
@@ -406,12 +404,12 @@
                         <li><strong>Risk/Reward</strong>: Calculate if big bet is worth potential loss</li>
                         <li><strong>Fewer survivors</strong>: Larger shares for everyone</li>
                     </ul>
-                    
-                    <h3>🤖 AI Personalities</h3>
+
+                    <h3>Bot Personalities</h3>
                     <ul>
-                        <li><strong>Cautious Carl</strong>: Min bets, finalizes early (60-80%)</li>
-                        <li><strong>Balanced Betty</strong>: Moderate strategy (40-60% finalize)</li>
-                        <li><strong>Aggressive Alex</strong>: High bets, finalizes late (30-50%)</li>
+                        <li><strong>Carl (Cautious)</strong>: Min bets, finalizes early (60-80%)</li>
+                        <li><strong>Betty (Balanced)</strong>: Moderate strategy (40-60% finalize)</li>
+                        <li><strong>Alex (Aggressive)</strong>: High bets, finalizes late (30-50%)</li>
                     </ul>
                 </div>
             </div>

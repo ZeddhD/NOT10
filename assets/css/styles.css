@@ -1185,7 +1185,8 @@ h1, h2, h3, h4, h5, h6 {
    never has to switch to a static list on small screens. Same 0% inset on
    all four sides now (top/bottom used to sit 2% further in than left/right,
    which read as unbalanced - extra dead space above/below versus none on
-   the sides). */
+   the sides). Left/right panels are vertically centered on the table's true
+   horizontal midline (was top:38%, sitting visibly above center). */
 .player-panel.pos-0 {
     bottom: 0%;
     left: 50%;
@@ -1193,8 +1194,9 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .player-panel.pos-1 {
-    top: 38%;
+    top: 50%;
     right: 0%;
+    transform: translateY(-50%);
 }
 
 .player-panel.pos-2 {
@@ -1204,8 +1206,9 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .player-panel.pos-3 {
-    top: 38%;
+    top: 50%;
     left: 0%;
+    transform: translateY(-50%);
 }
 
 .player-info {

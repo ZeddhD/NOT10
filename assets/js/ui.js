@@ -123,12 +123,9 @@ export function updateRoomCode(elementId, code) {
 }
 
 // Clockwise angle (deg) for each seat's position around the table ring -
-// pos-2 is at the top (0deg), pos-0 bottom (180deg), a plain 90/270 for
-// pos-1/pos-3. pos-1 and pos-3's panels aren't vertically centered though
-// (.player-panel.pos-1/.pos-3 sit at top:38%, not 50%), so a literal 90/270
-// arrow lands below where those panels actually are - nudged up (toward
-// 0deg) to match. Keep in sync with the .player-panel.pos-N rules.
-const SEAT_ANGLE = { 2: 0, 1: 82, 0: 180, 3: 278 };
+// pos-2 top (0deg), pos-1 right (90deg), pos-0 bottom (180deg), pos-3 left
+// (270deg). Keep in sync with the .player-panel.pos-N rules.
+const SEAT_ANGLE = { 2: 0, 1: 90, 0: 180, 3: 270 };
 
 /**
  * Rotate the turn-order arrow to point at whoever's turn it is.

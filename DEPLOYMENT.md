@@ -261,7 +261,29 @@ deploy.
 
 ---
 
-### Deployment Platform C: Netlify (Connect Repo or Drag & Drop)
+### Deployment Platform C: Render (Blueprint, Free Tier)
+
+`render.yaml` is already committed to this repo as a static-site
+Blueprint - no Dockerfile needed here (unlike a backend service) since
+NOT10 has nothing to run server-side.
+
+1. Push this repo to GitHub (if you haven't already)
+2. In the [Render dashboard](https://dashboard.render.com): **New →
+   Blueprint**, and point it at this repo
+3. Render reads `render.yaml`, sees `runtime: static` with no build
+   command, and deploys the repo root directly as static files
+4. Wait ~1 minute for the first deploy. Render gives you a
+   `https://<name>.onrender.com` URL
+5. Add your Supabase credentials the same way as any static host: either
+   commit `assets/js/config.js` (see Step 5 of Local Setup above, keeping
+   in mind it becomes public) or fetch them from environment variables at
+   runtime instead
+
+Every push to the connected branch auto-redeploys. Static sites on
+Render's free tier don't spin down like their web-service free tier
+does, so this stays reachable without a cold-start delay.
+
+### Deployment Platform D: Netlify (Connect Repo or Drag & Drop)
 
 **Fastest path:** `netlify.toml` is already committed to this repo. Go to
 [app.netlify.com](https://app.netlify.com), **"Add new site" → "Import an
@@ -415,6 +437,7 @@ supabase/rls.sql       ← Apply these security policies second
 - **Supabase Docs**: https://supabase.com/docs
 - **GitHub Pages**: https://pages.github.com
 - **Vercel**: https://vercel.com
+- **Render**: https://render.com
 - **Netlify**: https://netlify.com
 
 ---

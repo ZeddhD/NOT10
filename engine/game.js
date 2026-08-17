@@ -160,6 +160,16 @@ export function processBet(room, players, roundState, playerId, action, amount) 
         if (isRaise) hasRaised[playerId] = true;
         actionCount[playerId] = (actionCount[playerId] || 0) + 1;
 
+        // A regular bet/raise (not just the ALL-IN button) can also empty a
+        // player's stack, e.g. betting their exact last $100 - if so there
+        // is no possible further action, so auto-finalize the same as
+        // CALL/ALL-IN do, instead of stranding them on their own turn with
+        // every button correctly disabled and nothing left to click.
+        if (player.money_cents === 0) {
+            finalized[playerId] = true;
+            roundState.finalized_json = finalized;
+        }
+
         roundState.bets_json = bets;
         roundState.has_raised_json = hasRaised;
         roundState.bet_action_count_json = actionCount;

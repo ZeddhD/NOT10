@@ -531,20 +531,23 @@ export function updateBettingButtons(enabled, playerMoney, highestBet, hasRaised
     const allInBtn = document.getElementById('all-in-btn');
     const finalizeBtn = document.getElementById('finalize-btn');
     
-    // If player has less than $100, disable all buttons except ALL-IN
+    // If player has less than $100, disable all buttons except ALL-IN -
+    // and FINALIZE, since a player already auto-finalized by going to $0
+    // (see engine/game.js) must never be left with every button disabled
+    // and no way to proceed.
     if (playerMoney < 10000) {
         betButtons.forEach(btn => {
             btn.disabled = true;
         });
-        
+
         if (callButton) {
             callButton.disabled = true;
         }
-        
+
         if (finalizeBtn) {
-            finalizeBtn.disabled = true;
+            finalizeBtn.disabled = !enabled || betActionCount < 1 || !allPlayersActed;
         }
-        
+
         if (allInBtn) {
             allInBtn.disabled = !enabled || playerMoney <= 0;
         }

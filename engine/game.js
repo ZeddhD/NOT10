@@ -276,6 +276,10 @@ export function transitionToPlaying(room, activePlayers, roundState) {
     let highestBet = 0;
     let highestBettorId = null;
 
+    // Strict > (not >=) on purpose: ties go to whoever reached this bet
+    // amount earliest in turn order, and stay that way below - the tied
+    // players are just identified afterward so the tie can be announced,
+    // not to change who wins it.
     for (const player of orderedPlayers) {
         const playerBet = bets[player.id] || 0;
         if (playerBet > highestBet) {
@@ -287,6 +291,18 @@ export function transitionToPlaying(room, activePlayers, roundState) {
     const highestBettor = activePlayers.find(p => p.id === highestBettorId);
 
     if (highestBettorId && highestBet > 0) {
+        const tiedPlayers = orderedPlayers.filter(p => (bets[p.id] || 0) === highestBet);
+        if (tiedPlayers.length > 1) {
+            const others = tiedPlayers.filter(p => p.id !== highestBettorId).map(p => p.name).join(', ');
+            roundState.log_json.push({
+                type: 'tie_break',
+                playerId: highestBettorId,
+                playerName: highestBettor.name,
+                message: `${highestBettor.name} tied with ${others} at ${utils.formatMoney(highestBet)} - ${highestBettor.name} gets the choice for reaching it first`,
+                timestamp: utils.getTimestamp()
+            });
+        }
+
         roundState.highest_bettor_id = highestBettorId;
         roundState.highest_bet = highestBet;
         roundState.awaiting_position_choice = true;

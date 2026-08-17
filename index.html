@@ -127,6 +127,10 @@
 
                 <!-- Table Area -->
                 <div class="game-table">
+                    <!-- Felt surface - gives the table its own identity, separate
+                         from the page background -->
+                    <div class="table-surface" aria-hidden="true"></div>
+
                     <!-- Central Total Display -->
                     <div class="table-center">
                         <div id="turn-ring" class="turn-ring" aria-hidden="true">
@@ -139,50 +143,99 @@
                         <div id="phase-indicator" class="phase-indicator">Dealing...</div>
                     </div>
 
+                    <!-- Cards played this round - travel in from each seat and
+                         stay on the table until the next round starts -->
+                    <div class="played-card-display pos-0" id="played-card-0"></div>
+                    <div class="played-card-display pos-1" id="played-card-1"></div>
+                    <div class="played-card-display pos-2" id="played-card-2"></div>
+                    <div class="played-card-display pos-3" id="played-card-3"></div>
+
                     <!-- Player Panels (4 positions) -->
                     <div id="player-0" class="player-panel pos-0">
                         <div class="player-info">
                             <div class="player-name">Empty</div>
-                            <div class="player-money">$0</div>
-                            <div class="player-bet">Bet: $0</div>
+                            <div class="player-stats">
+                                <div class="stat-block">
+                                    <span class="stat-label">Money</span>
+                                    <span class="player-money">$0</span>
+                                </div>
+                                <div class="stat-block">
+                                    <span class="stat-label">Bet</span>
+                                    <span class="player-bet">$0</span>
+                                </div>
+                            </div>
                             <div class="player-status"></div>
                         </div>
-                        <div class="played-card-display" id="played-card-0"></div>
                     </div>
 
                     <div id="player-1" class="player-panel pos-1">
                         <div class="player-info">
                             <div class="player-name">Empty</div>
-                            <div class="player-money">$0</div>
-                            <div class="player-bet">Bet: $0</div>
+                            <div class="player-stats">
+                                <div class="stat-block">
+                                    <span class="stat-label">Money</span>
+                                    <span class="player-money">$0</span>
+                                </div>
+                                <div class="stat-block">
+                                    <span class="stat-label">Bet</span>
+                                    <span class="player-bet">$0</span>
+                                </div>
+                            </div>
                             <div class="player-status"></div>
                         </div>
-                        <div class="played-card-display" id="played-card-1"></div>
                     </div>
 
                     <div id="player-2" class="player-panel pos-2">
                         <div class="player-info">
                             <div class="player-name">Empty</div>
-                            <div class="player-money">$0</div>
-                            <div class="player-bet">Bet: $0</div>
+                            <div class="player-stats">
+                                <div class="stat-block">
+                                    <span class="stat-label">Money</span>
+                                    <span class="player-money">$0</span>
+                                </div>
+                                <div class="stat-block">
+                                    <span class="stat-label">Bet</span>
+                                    <span class="player-bet">$0</span>
+                                </div>
+                            </div>
                             <div class="player-status"></div>
                         </div>
-                        <div class="played-card-display" id="played-card-2"></div>
                     </div>
 
                     <div id="player-3" class="player-panel pos-3">
                         <div class="player-info">
                             <div class="player-name">Empty</div>
-                            <div class="player-money">$0</div>
-                            <div class="player-bet">Bet: $0</div>
+                            <div class="player-stats">
+                                <div class="stat-block">
+                                    <span class="stat-label">Money</span>
+                                    <span class="player-money">$0</span>
+                                </div>
+                                <div class="stat-block">
+                                    <span class="stat-label">Bet</span>
+                                    <span class="player-bet">$0</span>
+                                </div>
+                            </div>
                             <div class="player-status"></div>
                         </div>
-                        <div class="played-card-display" id="played-card-3"></div>
                     </div>
                 </div>
 
                 <!-- Player Hand & Controls -->
                 <div class="player-controls">
+                    <!-- Always-visible summary of your own stats - kept separate
+                         from the detailed per-opponent breakdown below, and
+                         separate from the money/bet figures shown on the table -->
+                    <div id="your-stats-bar" class="your-stats-bar">
+                        <div class="stat-chip">
+                            <span class="stat-chip-label">Your Money</span>
+                            <span id="your-money-amount" class="stat-chip-value money">$0</span>
+                        </div>
+                        <div class="stat-chip">
+                            <span class="stat-chip-label">Best Potential Payout</span>
+                            <span id="your-potential-amount" class="stat-chip-value stakes">&mdash;</span>
+                        </div>
+                    </div>
+
                     <div class="controls-and-cards">
                         <div class="controls-column">
                             <div id="betting-controls" class="controls-section hidden">

@@ -731,6 +731,26 @@ h1, h2, h3, h4, h5, h6 {
     padding: 0;
 }
 
+/* The felt - gives the table a distinct identity separate from the page
+   background, instead of the panels just floating on empty space */
+.table-surface {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 88%;
+    height: 88%;
+    transform: translate(-50%, -50%);
+    border-radius: 50%;
+    background:
+        radial-gradient(circle at 50% 42%, #2d2144 0%, #211a35 55%, #170f26 100%);
+    border: var(--border-thicker) solid var(--color-ink);
+    box-shadow:
+        inset 0 0 0 2px rgba(255, 183, 3, 0.12),
+        inset 0 12px 30px rgba(0, 0, 0, 0.45),
+        var(--shadow-lg);
+    z-index: 0;
+}
+
 .table-center {
     position: absolute;
     top: 50%;
@@ -836,6 +856,10 @@ h1, h2, h3, h4, h5, h6 {
     transition: border-color var(--transition-normal), box-shadow var(--transition-normal);
 }
 
+/* Played cards live directly on the table (siblings of the player panels,
+   not nested inside them) so they can travel independently from the
+   player's seat to a fixed slot on the felt and stay there for the round -
+   this is the round's visible history, not a transient toast. */
 .played-card-display {
     position: absolute;
     width: clamp(34px, 7vw, 50px);
@@ -856,42 +880,64 @@ h1, h2, h3, h4, h5, h6 {
 
 .played-card-display.visible {
     display: flex;
-    animation: card-slam var(--transition-impact);
 }
 
-@keyframes card-slam {
-    0% { transform: scale(1.8) rotate(-8deg); opacity: 0; }
-    60% { transform: scale(0.95) rotate(3deg); opacity: 1; }
-    100% { transform: scale(1) rotate(0deg); }
+/* Table slots, roughly halfway between each seat and the center total -
+   matches the SEAT_ANGLE mapping the turn arrow uses (ui.js) */
+.played-card-display.pos-2 {
+    top: 24%;
+    left: 50%;
+    transform: translateX(-50%);
 }
 
-/* Position played cards next to each player panel */
-.pos-0 .played-card-display {
-    left: 100%;
+.played-card-display.pos-1 {
     top: 50%;
+    right: 20%;
     transform: translateY(-50%);
-    margin-left: 8px;
 }
 
-.pos-1 .played-card-display {
-    right: 100%;
-    top: 50%;
-    transform: translateY(-50%);
-    margin-right: 8px;
+.played-card-display.pos-0 {
+    bottom: 24%;
+    left: 50%;
+    transform: translateX(-50%);
 }
 
-.pos-2 .played-card-display {
-    right: 100%;
+.played-card-display.pos-3 {
     top: 50%;
+    left: 20%;
     transform: translateY(-50%);
-    margin-right: 8px;
 }
 
-.pos-3 .played-card-display {
-    left: 100%;
-    top: 50%;
-    transform: translateY(-50%);
-    margin-left: 8px;
+/* Deal-in: the card visibly travels inward from its seat's direction and
+   settles into its table slot, then stays put (no reverse/exit animation -
+   it's cleared, not animated away, at the next round's clearPlayedCards()). */
+.played-card-display.pos-2.visible { animation: deal-from-top var(--transition-impact); }
+.played-card-display.pos-1.visible { animation: deal-from-right var(--transition-impact); }
+.played-card-display.pos-0.visible { animation: deal-from-bottom var(--transition-impact); }
+.played-card-display.pos-3.visible { animation: deal-from-left var(--transition-impact); }
+
+@keyframes deal-from-top {
+    0% { transform: translate(-50%, -70px) scale(0.7) rotate(-8deg); opacity: 0; }
+    60% { opacity: 1; }
+    100% { transform: translate(-50%, 0) scale(1) rotate(0deg); opacity: 1; }
+}
+
+@keyframes deal-from-bottom {
+    0% { transform: translate(-50%, 70px) scale(0.7) rotate(8deg); opacity: 0; }
+    60% { opacity: 1; }
+    100% { transform: translate(-50%, 0) scale(1) rotate(0deg); opacity: 1; }
+}
+
+@keyframes deal-from-right {
+    0% { transform: translate(70px, -50%) scale(0.7) rotate(8deg); opacity: 0; }
+    60% { opacity: 1; }
+    100% { transform: translate(0, -50%) scale(1) rotate(0deg); opacity: 1; }
+}
+
+@keyframes deal-from-left {
+    0% { transform: translate(-70px, -50%) scale(0.7) rotate(-8deg); opacity: 0; }
+    60% { opacity: 1; }
+    100% { transform: translate(0, -50%) scale(1) rotate(0deg); opacity: 1; }
 }
 
 /* Played card color coding by value - the fixed card legend */
@@ -1016,6 +1062,29 @@ h1, h2, h3, h4, h5, h6 {
     text-overflow: ellipsis;
 }
 
+/* Money and Bet are always shown as two separate labeled stats - never
+   collapsed into one line - so each player's panel is scannable at a glance
+   without relying on color alone to tell them apart (Design Rule 2/3). */
+.player-stats {
+    display: flex;
+    gap: clamp(6px, 1.6vw, var(--spacing-md));
+    margin-top: 1px;
+}
+
+.stat-block {
+    display: flex;
+    flex-direction: column;
+    line-height: 1.15;
+}
+
+.stat-label {
+    font-size: 0.6rem;
+    font-weight: 700;
+    color: var(--color-text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+
 .player-money {
     color: var(--color-success);
     font-weight: 800;
@@ -1044,6 +1113,51 @@ h1, h2, h3, h4, h5, h6 {
     border-top: var(--border-thick) solid var(--color-ink);
     padding: var(--spacing-lg) var(--spacing-xl);
     box-shadow: 0 -4px 0 rgba(0, 0, 0, 0.25);
+}
+
+/* Your own Money and Potential Payout - two distinct, always-visible stat
+   chips. Kept separate on purpose: Money is what you have, Potential
+   Payout is what you could get, and conflating them into one number was
+   the exact confusion this bar exists to remove. */
+.your-stats-bar {
+    display: flex;
+    gap: var(--spacing-md);
+    margin-bottom: var(--spacing-lg);
+    flex-wrap: wrap;
+}
+
+.stat-chip {
+    flex: 1 1 180px;
+    background: var(--color-bg-tertiary);
+    border: var(--border-thick) solid var(--color-ink);
+    border-radius: var(--radius-md);
+    padding: var(--spacing-sm) var(--spacing-md);
+    box-shadow: var(--shadow-sm);
+}
+
+.stat-chip-label {
+    display: block;
+    font-size: 0.7rem;
+    font-weight: 700;
+    color: var(--color-text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+
+.stat-chip-value {
+    display: block;
+    font-family: var(--font-display);
+    font-size: 1.4rem;
+    font-weight: 900;
+    font-variant-numeric: tabular-nums;
+}
+
+.stat-chip-value.money {
+    color: var(--color-success);
+}
+
+.stat-chip-value.stakes {
+    color: var(--color-stakes);
 }
 
 .controls-and-cards {

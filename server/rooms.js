@@ -506,7 +506,9 @@ export class RoomManager {
             return;
         }
 
-        if (decision.shouldFinalize && decision.action !== 'finalize') {
+        // 'call' and 'all-in' already auto-finalize inside processBet - only
+        // a plain 'bet' needs this separate follow-up finalize call.
+        if (decision.shouldFinalize && decision.action !== 'finalize' && decision.action !== 'call' && decision.action !== 'all-in') {
             await utils.sleep(300);
             if (room.room.status !== 'in_game') return;
             const finalizeResult = game.processBet(room.room, room.players, room.roundState, player.id, 'finalize', null);

@@ -180,12 +180,24 @@ describe('game.processBet', () => {
         expect(players.find(p => p.id === 'p2').money_cents).toBe(game.GAME_CONSTANTS.STARTING_MONEY - 50000);
     });
 
+    it('call auto-finalizes - there is no further action left to take', () => {
+        game.processBet(room, players, roundState, 'p1', 'bet', 50000);
+        game.processBet(room, players, roundState, 'p2', 'call', null);
+        expect(roundState.finalized_json['p2']).toBe(true);
+    });
+
     it('all-in bets the player\'s entire remaining balance', () => {
         players[0].money_cents = 5000; // less than the $100 minimum
         const result = game.processBet(room, players, roundState, 'p1', 'all-in', null);
         expect(result.success).toBe(true);
         expect(result.amount).toBe(5000);
         expect(players[0].money_cents).toBe(0);
+    });
+
+    it('all-in auto-finalizes - a broke player has no further action left', () => {
+        players[0].money_cents = 5000;
+        game.processBet(room, players, roundState, 'p1', 'all-in', null);
+        expect(roundState.finalized_json['p1']).toBe(true);
     });
 
     it('rejects a bet from an inactive/spectator player', () => {

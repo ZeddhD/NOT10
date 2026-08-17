@@ -237,6 +237,16 @@
                     </div>
 
                     <div class="controls-and-cards">
+                        <!-- Your hand comes first - it's what you're acting on -->
+                        <div class="cards-column">
+                            <div id="hand-cards" class="hand-cards">
+                                <!-- Dynamically populated with cards -->
+                            </div>
+                            <div id="earnings-breakdown" class="earnings-breakdown hidden">
+                                <!-- Dynamically populated with potential earnings -->
+                            </div>
+                        </div>
+
                         <div class="controls-column">
                             <div id="betting-controls" class="controls-section hidden">
                                 <div class="controls-header">
@@ -248,13 +258,20 @@
                                         <span id="call-amount">To Call: $0</span>
                                     </div>
                                 </div>
+                                <!-- Two visually distinct groups on purpose: adjusting your
+                                     bet (outlined, low-commitment) vs. committing to it
+                                     (solid, high-commitment) - not six equal-weight buttons. -->
                                 <div class="betting-buttons">
-                                    <button class="btn btn-bet" data-amount="100">BET +$100</button>
-                                    <button class="btn btn-bet" data-amount="200">BET +$200</button>
-                                    <button class="btn btn-bet" data-amount="500">BET +$500</button>
-                                    <button id="all-in-btn" class="btn btn-all-in">ALL-IN</button>
-                                    <button id="finalize-btn" class="btn btn-finalize">FINALIZE</button>
-                                    <button id="call-btn" class="btn btn-call">CALL</button>
+                                    <div class="bet-amount-group">
+                                        <button class="btn btn-bet" data-amount="100">+$100</button>
+                                        <button class="btn btn-bet" data-amount="200">+$200</button>
+                                        <button class="btn btn-bet" data-amount="500">+$500</button>
+                                    </div>
+                                    <div class="bet-commit-group">
+                                        <button id="call-btn" class="btn btn-call">CALL</button>
+                                        <button id="all-in-btn" class="btn btn-all-in">ALL-IN</button>
+                                        <button id="finalize-btn" class="btn btn-finalize">FINALIZE</button>
+                                    </div>
                                 </div>
                             </div>
 
@@ -290,26 +307,19 @@
                                 </div>
                             </div>
                         </div>
-                        
-                        <div class="cards-column">
-                            <div id="hand-cards" class="hand-cards">
-                                <!-- Dynamically populated with cards -->
-                            </div>
-                            <div id="earnings-breakdown" class="earnings-breakdown hidden">
-                                <!-- Dynamically populated with potential earnings -->
-                            </div>
-                        </div>
                     </div>
-                </div>
 
-                <!-- Event Log -->
-                <div class="event-log">
-                    <div class="log-header">
-                        <h3>Game Log</h3>
-                        <button id="clear-log-btn" class="btn-text">Clear</button>
-                    </div>
-                    <div id="log-messages" class="log-messages">
-                        <!-- Dynamically populated -->
+                    <!-- Event Log - lives in the sidebar now, not a full-width
+                         strip, so the table never has to share vertical space
+                         with it -->
+                    <div class="event-log">
+                        <div class="log-header">
+                            <h3>Game Log</h3>
+                            <button id="clear-log-btn" class="btn-text">Clear</button>
+                        </div>
+                        <div id="log-messages" class="log-messages">
+                            <!-- Dynamically populated -->
+                        </div>
                     </div>
                 </div>
             </div>

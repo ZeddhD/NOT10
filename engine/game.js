@@ -190,6 +190,12 @@ export function processBet(room, players, roundState, playerId, action, amount) 
 
         actionCount[playerId] = (actionCount[playerId] || 0) + 1;
         roundState.bet_action_count_json = actionCount;
+        // CALL auto-finalizes (documented in the help modal) - there's
+        // nothing left to decide once you've matched the table, so
+        // requiring a separate FINALIZE click would just strand the
+        // player on a "your turn" screen with no valid action to take.
+        finalized[playerId] = true;
+        roundState.finalized_json = finalized;
         roundState.log_json.push({
             type: 'call',
             playerId,
@@ -219,6 +225,12 @@ export function processBet(room, players, roundState, playerId, action, amount) 
         roundState.bets_json = bets;
         roundState.has_raised_json = hasRaised;
         roundState.bet_action_count_json = actionCount;
+        // ALL-IN auto-finalizes (documented in the help modal) - a player
+        // with $0 left has no further bet/call/all-in action available,
+        // so without this they'd be stuck on "your turn" with every
+        // button disabled and no way to proceed.
+        finalized[playerId] = true;
+        roundState.finalized_json = finalized;
         roundState.log_json.push({
             type: 'all-in',
             playerId,

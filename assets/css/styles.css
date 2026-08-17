@@ -1182,11 +1182,13 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 /* Player positions (4-player table layout) - percentage-based so this
-   never has to switch to a static list on small screens. Same 0% inset on
-   all four sides now (top/bottom used to sit 2% further in than left/right,
-   which read as unbalanced - extra dead space above/below versus none on
-   the sides). Left/right panels are vertically centered on the table's true
-   horizontal midline (was top:38%, sitting visibly above center). */
+   never has to switch to a static list on small screens. 0% inset on
+   bottom/left/right; pos-2 (top) alone gets a small positive inset -
+   the table-banner (pot + phase badge) sits directly above the table with
+   no slack of its own, so pos-2 at a flush 0% left almost no gap between
+   the phase badge and that seat's panel. Left/right panels are vertically
+   centered on the table's true horizontal midline (was top:38%, sitting
+   visibly above center). */
 .player-panel.pos-0 {
     bottom: 0%;
     left: 50%;
@@ -1200,7 +1202,7 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .player-panel.pos-2 {
-    top: 0%;
+    top: 4%;
     left: 50%;
     transform: translateX(-50%);
 }

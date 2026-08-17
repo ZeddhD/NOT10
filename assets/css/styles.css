@@ -1906,6 +1906,37 @@ h1, h2, h3, h4, h5, h6 {
         right: -4px;
     }
 
+    /* Money and Bet side-by-side in an already-narrow mobile panel left
+       too little width for a real bet amount (e.g. "$1,896") - it spilled
+       out past the panel's own border instead of wrapping or shrinking.
+       Stacked, each stat gets the panel's full width to work with. */
+    .player-stats {
+        flex-direction: column;
+        gap: 0;
+    }
+
+    .player-money,
+    .player-bet {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 100%;
+    }
+
+    /* The turn-order ring's radius was close enough to the played-card
+       chips' resting radius (--chip-radius on .game-table) that the turn
+       arrow could land right on top of a chip once one was played. Pull
+       the ring in closer to the center total - clearly inside the chips'
+       radius - instead of matching desktop's larger ring. */
+    .turn-ring {
+        width: clamp(110px, 20cqw, 150px);
+        height: clamp(110px, 20cqw, 150px);
+    }
+
+    .turn-arrow {
+        transform-origin: 50% calc(clamp(55px, 10cqw, 75px) + 3px);
+    }
+
     .player-controls {
         border-left: none;
         border-top: var(--border-thick) solid var(--color-ink);

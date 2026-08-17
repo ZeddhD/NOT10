@@ -309,6 +309,11 @@ export function transitionToPlaying(room, activePlayers, roundState) {
     }
 
     room.phase = 'playing';
+    // The card-play turn order for the whole round - processCardPlay
+    // advances through this list, not raw seat_index adjacency, so a
+    // spectator sitting between two active seats (or a later position
+    // choice) doesn't get silently re-derived and skip someone.
+    roundState.play_order = orderedPlayers.map(p => p.id);
 
     return {
         success: true,
@@ -367,6 +372,7 @@ export function applyPositionChoice(room, activePlayers, roundState, choice) {
 
     const firstPlayer = orderedPlayers[0];
     roundState.awaiting_position_choice = false;
+    roundState.play_order = orderedPlayers.map(p => p.id);
     room.turn_player_id = firstPlayer.id;
 
     return { success: true, firstPlayer };
@@ -408,9 +414,14 @@ export function processCardPlay(room, players, roundState, playerId, cardValue) 
         return { success: true, bust: true, eliminatedPlayer: player, total: newTotal };
     }
 
-    const activePlayers = players.filter(p => p.status === 'active');
-    const nextPlayerIndex = utils.getNextPlayerIndex(player.seat_index, activePlayers);
-    const nextPlayer = activePlayers.find(p => p.seat_index === nextPlayerIndex);
+    // Advance through the round's established play order (set once by
+    // transitionToPlaying/applyPositionChoice), not raw seat_index math -
+    // that ignored a GO FIRST/GO LAST choice for every card after the
+    // first one, and could skip an active player entirely.
+    const order = roundState.play_order || [];
+    const myOrderIndex = order.indexOf(playerId);
+    const nextPlayerId = myOrderIndex !== -1 ? order[(myOrderIndex + 1) % order.length] : null;
+    const nextPlayer = players.find(p => p.id === nextPlayerId && p.status === 'active');
 
     if (nextPlayer) {
         room.turn_player_id = nextPlayer.id;

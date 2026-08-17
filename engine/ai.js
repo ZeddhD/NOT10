@@ -264,31 +264,28 @@ export async function executeAIBet(ai, gameState, roundState) {
     if (decision.action === 'call') {
         const handStrength = ai.evaluateHandStrength(gameState.tableTotal);
 
+        // There is no fold in NOT10 - every active player must bet, call,
+        // or go all-in. "Back out with a weak hand" is only a real option
+        // once you've already made your mandatory first action this round
+        // (bet_action_count_json >= 1); before that, finalize() is invalid
+        // (engine rejects it) and the AI would loop forever retrying the
+        // same illegal action every tick, freezing the game on its turn.
+        const actionCount = roundState.bet_action_count_json || {};
+        const hasActedThisRound = (actionCount[ai.id] || 0) >= 1;
+
         if (callAmount >= ai.money_cents * 0.8) {
-            if (ai.personality === 'cautious') {
-                if (handStrength > 0.85) {
-                    decision.action = callAmount >= ai.money_cents ? 'all-in' : 'call';
-                } else {
-                    decision.action = 'finalize';
-                    decision.shouldFinalize = true;
-                    return decision;
-                }
-            } else if (ai.personality === 'aggressive') {
-                if (handStrength > 0.5) {
-                    decision.action = callAmount >= ai.money_cents ? 'all-in' : 'call';
-                } else {
-                    decision.action = 'finalize';
-                    decision.shouldFinalize = true;
-                    return decision;
-                }
+            const strengthThreshold = ai.personality === 'cautious' ? 0.85
+                : ai.personality === 'aggressive' ? 0.5
+                : 0.7;
+
+            if (handStrength > strengthThreshold) {
+                decision.action = callAmount >= ai.money_cents ? 'all-in' : 'call';
+            } else if (hasActedThisRound) {
+                decision.action = 'finalize';
+                decision.shouldFinalize = true;
+                return decision;
             } else {
-                if (handStrength > 0.7) {
-                    decision.action = callAmount >= ai.money_cents ? 'all-in' : 'call';
-                } else {
-                    decision.action = 'finalize';
-                    decision.shouldFinalize = true;
-                    return decision;
-                }
+                decision.action = callAmount >= ai.money_cents ? 'all-in' : 'call';
             }
         }
     }

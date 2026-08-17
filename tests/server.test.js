@@ -220,16 +220,37 @@ describe('duplicate connection for the same player', () => {
         first.send({ type: 'create_room', playerId, name: 'Dup' });
         const created = await first.waitFor(d => d.type === 'state');
         const roomCode = created.room.code;
+        const sessionToken = created.sessionToken;
 
         const closeCode = new Promise((resolve) => first.ws.on('close', resolve));
 
         const second = client();
         await second.ready;
-        second.send({ type: 'rejoin', playerId, roomCode });
+        second.send({ type: 'rejoin', playerId, roomCode, sessionToken });
         await second.waitFor(d => d.type === 'state');
 
         expect(await closeCode).toBe(4001);
         second.close();
+    });
+});
+
+describe('rejoin requires the real session token', () => {
+    it('rejects a rejoin with a wrong/missing token instead of handing over the seat', async () => {
+        const owner = client();
+        await owner.ready;
+        const playerId = 'hijack-' + Math.random().toString(36).slice(2, 8);
+        owner.send({ type: 'create_room', playerId, name: 'Owner' });
+        const created = await owner.waitFor(d => d.type === 'state');
+        const roomCode = created.room.code;
+
+        const attacker = client();
+        await attacker.ready;
+        attacker.send({ type: 'rejoin', playerId, roomCode, sessionToken: 'not-the-real-token' });
+        const rejected = await attacker.waitFor(d => d.type === 'error');
+        expect(rejected.reason).toBe('rejoin_failed');
+
+        owner.close();
+        attacker.close();
     });
 });
 

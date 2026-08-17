@@ -16,6 +16,7 @@ let roomCode = null;
 let aReconnected = false;
 let bJoined = false;
 let botCountVerified = false;
+let aSessionToken = null;
 
 let wsA = new WebSocket(URL);
 let wsB;
@@ -29,6 +30,7 @@ wsA.on('message', (raw) => {
     const data = JSON.parse(raw.toString());
     if (data.type === 'error') { fail('A got error: ' + data.message); return; }
     if (data.type !== 'state') return;
+    if (data.sessionToken) aSessionToken = data.sessionToken;
 
     if (!roomCode) {
         roomCode = data.room.code;
@@ -78,7 +80,7 @@ function verifyBots(data) {
     setTimeout(() => {
         const wsA2 = new WebSocket(URL);
         wsA2.on('open', () => {
-            wsA2.send(JSON.stringify({ type: 'rejoin', playerId: A_ID, roomCode }));
+            wsA2.send(JSON.stringify({ type: 'rejoin', playerId: A_ID, roomCode, sessionToken: aSessionToken }));
         });
         wsA2.on('message', (raw3) => {
             const d3 = JSON.parse(raw3.toString());

@@ -1819,49 +1819,21 @@ h1, h2, h3, h4, h5, h6 {
         overflow: visible;
     }
 
-    /* Meaningfully smaller than desktop on purpose - the table dominating
-       the whole screen was pushing the hand/betting controls (the actual
-       "do things here" area) below the fold, needing a long scroll just
-       to reach a button. A smaller table trades a bit of table presence
-       for the controls being reachable near the top of the screen. */
     .game-table {
         height: auto;
-        width: min(66vw, 320px);
+        width: min(94vw, 520px);
         max-width: none;
-        margin: var(--spacing-md) auto 3rem;
-        /* Smaller table needs smaller everything scaled off it - the
-           cqw-based clamps already shrink proportionally, just tighten
-           the floor so panels/chips don't fight each other for room. */
-        --chip-radius: clamp(56px, 15cqw, 85px);
+        margin: var(--spacing-md) auto;
     }
 
-    /* Was living in the table's top-right corner (see the non-mobile
-       rule) - on a narrow table that's exactly where the top player's
-       panel and its BUSTED stamp also want to be. Moved below the table
-       instead, in the margin reserved above via .game-table's
-       margin-bottom, so it never has anything to collide with. */
-    .phase-indicator {
-        top: auto;
-        right: auto;
-        left: 50%;
-        bottom: -2.75rem;
-        transform: translateX(-50%);
-    }
-
-    .player-panel {
-        width: clamp(78px, 26cqw, 130px);
-    }
-
-    /* Money and Bet stacked instead of side-by-side - splitting an
-       already-narrow panel in half was clipping larger amounts. */
-    .player-stats {
-        flex-direction: column;
-        gap: 0;
-    }
-
+    /* The one real problem: the BUSTED stamp's outward bleed (see the
+       base .bust-stamp rule) was reaching far enough right to land on
+       top of the phase indicator sitting in the table's corner. Pull the
+       stamp back so it stays over its own panel instead of past it -
+       everything else about this layout was fine as it was. */
     .bust-stamp {
-        font-size: 0.7rem;
-        padding: 2px 7px;
+        top: -6px;
+        right: -4px;
     }
 
     .player-controls {
@@ -1927,8 +1899,8 @@ h1, h2, h3, h4, h5, h6 {
     }
 
     .game-table {
-        width: min(70vw, 260px);
-        margin: var(--spacing-md) auto 3rem;
+        width: min(96vw, 380px);
+        margin: var(--spacing-md) auto;
     }
 
     .player-controls {

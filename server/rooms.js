@@ -243,6 +243,18 @@ export class RoomManager {
 
         room.sockets.delete(meta.playerId);
         this.socketMeta.delete(ws);
+
+        if (room.room.status === 'in_game') {
+            // Same reasoning as a real disconnect (see _resolveDisconnect):
+            // removing a player mid-round leaves turn_player_id/play_order
+            // pointing at someone who no longer exists, freezing the game
+            // for everyone left. Leave them seated but server-piloted.
+            const player = room.players.find(p => p.id === meta.playerId);
+            if (player) player.connected = false;
+            this._broadcast(room);
+            return;
+        }
+
         this._removePlayer(room, meta.playerId);
     }
 
@@ -391,9 +403,22 @@ export class RoomManager {
 
         if (result.bust) {
             this._endRound(room, player.id);
+        } else if (this._handsExhausted(room)) {
+            this._endRound(room, null); // no one busted - push, pot splits like every survivor won
         } else {
             this._broadcast(room);
         }
+    }
+
+    // Mathematically rare (needs an implausible run of low cards) but not
+    // impossible: every active player runs out of cards with the table
+    // still under 10. Without this, the next player's turn would arrive
+    // with an empty hand and nothing could ever advance again - the same
+    // silent-freeze shape as the earlier all-in/finalize bugs.
+    _handsExhausted(room) {
+        return room.players
+            .filter(p => p.status === 'active')
+            .every(p => (room.hands.get(p.id) || []).length === 0);
     }
 
     _endRound(room, eliminatedPlayerId) {
@@ -546,6 +571,8 @@ export class RoomManager {
 
         if (result.bust) {
             this._endRound(room, player.id);
+        } else if (this._handsExhausted(room)) {
+            this._endRound(room, null);
         } else {
             this._broadcast(room);
         }

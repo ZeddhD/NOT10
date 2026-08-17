@@ -124,6 +124,11 @@ body {
     color: var(--color-text-primary);
     min-height: 100vh;
     overflow-x: hidden;
+    /* Mobile Safari's default tap flash (a semi-transparent white/gray
+       overlay on any tapped element) reads as a bug on chunky bordered
+       buttons like these - flat colors, no ambiguity about what's
+       "pressed" state vs. "something rendered wrong". */
+    -webkit-tap-highlight-color: transparent;
 }
 
 #app {
@@ -774,10 +779,13 @@ h1, h2, h3, h4, h5, h6 {
        object-fit:contain uses) but rendered as a stretched oval in
        practice - not worth the risk over a slightly-approximate header
        height guess here. */
-    width: min(100%, calc(100vh - 120px));
+    width: min(100%, calc(100vh - 168px));
     max-width: 640px;
     aspect-ratio: 1 / 1;
-    margin: 0 auto;
+    /* Top margin reserves room for the phase indicator, which sits just
+       above the table as its own banner (see .phase-indicator) rather
+       than in a table corner already crowded by the top player's panel. */
+    margin: 3rem auto 0;
     padding: 0;
     min-height: 0;
     min-width: 0;
@@ -890,10 +898,16 @@ h1, h2, h3, h4, h5, h6 {
     50% { transform: scale(1.15); }
 }
 
+/* Sits as its own banner right above the table - centered, clear of the
+   top player's panel/BUSTED stamp and the fixed corner button cluster,
+   consistent at every screen size (see .game-table's top margin, which
+   reserves the room for it). */
 .phase-indicator {
     position: absolute;
-    top: 2%;
-    right: 2%;
+    top: -3rem;
+    left: 50%;
+    right: auto;
+    transform: translateX(-50%);
     z-index: 12;
     color: var(--color-text-secondary);
     font-size: 0.8rem;
@@ -904,6 +918,7 @@ h1, h2, h3, h4, h5, h6 {
     border-radius: var(--radius-md);
     text-transform: uppercase;
     letter-spacing: 0.05em;
+    white-space: nowrap;
 }
 
 /* Player Panels - percentage-based circular seating, scales at every size */
@@ -1568,27 +1583,40 @@ h1, h2, h3, h4, h5, h6 {
 
 .position-buttons .btn-primary {
     flex: 1;
-    min-width: 150px;
-    max-width: 200px;
-    padding: var(--spacing-lg);
+    min-width: 140px;
+    max-width: 220px;
+    min-height: 96px;
+    padding: var(--spacing-md);
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: var(--spacing-xs);
+    justify-content: center;
+    gap: 2px;
     position: relative;
 }
 
+/* The headline: big, bold, display font - the kind of treatment the
+   rest of the game gives money/stakes numbers, not a plain label. */
 .position-buttons .btn-text {
-    font-size: 1.1rem;
-    font-weight: 800;
+    font-family: var(--font-display);
+    font-size: 1.35rem;
+    font-weight: 900;
+    letter-spacing: 0.02em;
     display: block;
 }
 
+/* The description needs to actually look like a caption, not a second
+   headline - .btn forces uppercase on everything inside it by default,
+   which made this read identically to .btn-text (same weight of shout,
+   just smaller) instead of a quieter explanatory line underneath it. */
 .position-buttons .btn-hint {
-    font-size: 0.75rem;
+    font-size: 0.72rem;
     font-weight: 600;
-    opacity: 0.8;
+    text-transform: none;
+    letter-spacing: normal;
+    opacity: 0.75;
     display: block;
+    margin-top: 1px;
 }
 
 .position-buttons .btn-primary:hover .btn-hint {
@@ -1847,21 +1875,11 @@ h1, h2, h3, h4, h5, h6 {
         height: auto;
         width: min(94vw, 520px);
         max-width: none;
-        /* Top margin grew to reserve room for the phase indicator, moved
-           above the table below - the table itself is untouched. */
-        margin: 2.75rem auto var(--spacing-md);
-    }
-
-    /* The table's own corner is exactly where the top player's panel and
-       its BUSTED stamp also want to be, and now also the fixed sound
-       toggle - too much fighting for one spot. Moved to sit as its own
-       banner above the whole table (in the margin reserved on
-       .game-table above) instead, clear of everything. */
-    .phase-indicator {
-        top: -2.75rem;
-        right: auto;
-        left: 50%;
-        transform: translateX(-50%);
+        /* Top margin matches the base .phase-indicator's -3rem offset -
+           same banner-above-table treatment as desktop, just a narrower
+           table. See the base (non-media-query) .game-table/.phase-
+           indicator rules for the full reasoning. */
+        margin: 3rem auto var(--spacing-md);
     }
 
     /* The one real overlap left inside the table itself: the BUSTED
@@ -1937,7 +1955,7 @@ h1, h2, h3, h4, h5, h6 {
 
     .game-table {
         width: min(96vw, 380px);
-        margin: var(--spacing-md) auto;
+        margin: 3rem auto var(--spacing-md);
     }
 
     .player-controls {

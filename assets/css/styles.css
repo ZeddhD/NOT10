@@ -1819,11 +1819,49 @@ h1, h2, h3, h4, h5, h6 {
         overflow: visible;
     }
 
+    /* Meaningfully smaller than desktop on purpose - the table dominating
+       the whole screen was pushing the hand/betting controls (the actual
+       "do things here" area) below the fold, needing a long scroll just
+       to reach a button. A smaller table trades a bit of table presence
+       for the controls being reachable near the top of the screen. */
     .game-table {
         height: auto;
-        width: min(94vw, 520px);
+        width: min(66vw, 320px);
         max-width: none;
-        margin: var(--spacing-md) auto;
+        margin: var(--spacing-md) auto 3rem;
+        /* Smaller table needs smaller everything scaled off it - the
+           cqw-based clamps already shrink proportionally, just tighten
+           the floor so panels/chips don't fight each other for room. */
+        --chip-radius: clamp(56px, 15cqw, 85px);
+    }
+
+    /* Was living in the table's top-right corner (see the non-mobile
+       rule) - on a narrow table that's exactly where the top player's
+       panel and its BUSTED stamp also want to be. Moved below the table
+       instead, in the margin reserved above via .game-table's
+       margin-bottom, so it never has anything to collide with. */
+    .phase-indicator {
+        top: auto;
+        right: auto;
+        left: 50%;
+        bottom: -2.75rem;
+        transform: translateX(-50%);
+    }
+
+    .player-panel {
+        width: clamp(78px, 26cqw, 130px);
+    }
+
+    /* Money and Bet stacked instead of side-by-side - splitting an
+       already-narrow panel in half was clipping larger amounts. */
+    .player-stats {
+        flex-direction: column;
+        gap: 0;
+    }
+
+    .bust-stamp {
+        font-size: 0.7rem;
+        padding: 2px 7px;
     }
 
     .player-controls {
@@ -1855,10 +1893,6 @@ h1, h2, h3, h4, h5, h6 {
     .lobby-content,
     .join-content {
         padding: var(--spacing-xl);
-    }
-
-    .game-table {
-        width: min(94vw, 480px);
     }
 }
 
@@ -1893,20 +1927,12 @@ h1, h2, h3, h4, h5, h6 {
     }
 
     .game-table {
-        width: min(96vw, 380px);
-        margin: var(--spacing-md) auto;
+        width: min(70vw, 260px);
+        margin: var(--spacing-md) auto 3rem;
     }
 
     .player-controls {
         padding: var(--spacing-md);
-    }
-
-    .betting-buttons {
-        flex-direction: column;
-    }
-
-    .betting-buttons .btn {
-        width: 100%;
     }
 
     .lobby-actions {

@@ -118,6 +118,22 @@ describe('game.startNewRound', () => {
         expect(broke.status).toBe('spectator');
     });
 
+    it('declares the game over on money alone, even if a broke player is still marked active', () => {
+        // Simulates the exact gap that could let a round start (or keep
+        // going) when it should have already ended: a player at $0 whose
+        // status never got synced back to 'spectator'. The win check must
+        // not depend on status being accurate - money_cents is the only
+        // thing that actually determines who's still in the game.
+        players = [
+            makePlayer('p1', { money_cents: 400000, status: 'active' }),
+            makePlayer('p2', { money_cents: 0, status: 'active' }), // stale - should be spectator
+            makePlayer('p3', { money_cents: 0, status: 'active' })
+        ];
+        const result = game.startNewRound(room, players);
+        expect(result.gameOver).toBe(true);
+        expect(result.winner.id).toBe('p1');
+    });
+
     it('mutates room in place (phase/turn/round) and returns a fresh round state', () => {
         const result = game.startNewRound(room, players);
         expect(room.phase).toBe('betting');
@@ -324,6 +340,22 @@ describe('game.endRound - weighted pot distribution', () => {
 
         expect(room.starting_player_index).toBe(0); // (3 + 1) % 4
     });
+
+    it('syncs the eliminated player to spectator immediately, not just at the next round start', () => {
+        const room = makeRoom({ pot_cents: 100000, starting_player_index: 0 });
+        // a went all-in and busts - money_cents is already 0 from that bet
+        // (processBet deducts it at bet time; endRound never gives the
+        // eliminated player a pot share). c is the lone survivor.
+        const players = [
+            makePlayer('a', { money_cents: 0, status: 'active' }),
+            makePlayer('c', { money_cents: 500000, status: 'active' })
+        ];
+        const roundState = makeRoundState({ bets_json: { a: 100000, c: 0 } });
+
+        game.endRound(room, players, roundState, 'a');
+
+        expect(players.find(p => p.id === 'a').status).toBe('spectator');
+    });
 });
 
 describe('game.checkGameOver', () => {
@@ -417,6 +449,27 @@ describe('game.transitionToPlaying + game.applyPositionChoice', () => {
 
         game.transitionToPlaying(room, players, roundState);
         expect(roundState.log_json.find(e => e.type === 'tie_break')).toBeUndefined();
+    });
+
+    it('an ALL-IN bet counts the same as a regular bet for highest-bettor position choice', () => {
+        const room = makeRoom({ phase: 'betting', turn_player_id: 'a', starting_player_index: 0 });
+        const players = [
+            makePlayer('a', { seat_index: 0, money_cents: 30000 }),
+            makePlayer('b', { seat_index: 1, money_cents: 100000 })
+        ];
+        const roundState = makeRoundState();
+
+        // b bets a modest, ordinary amount first.
+        room.turn_player_id = 'b';
+        game.processBet(room, players, roundState, 'b', 'bet', 10000);
+        // a shoves their entire (smaller) stack - still less than b's
+        // money, but more than b's actual bet, so a should be highest.
+        room.turn_player_id = 'a';
+        game.processBet(room, players, roundState, 'a', 'all-in', null);
+
+        const transition = game.transitionToPlaying(room, players, roundState);
+        expect(transition.highestBettorId).toBe('a');
+        expect(transition.highestBet).toBe(30000);
     });
 });
 

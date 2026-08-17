@@ -353,6 +353,36 @@ describe('game.transitionToPlaying + game.applyPositionChoice', () => {
         const applied = game.applyPositionChoice(room, players, roundState, 'last');
         expect(applied.firstPlayer.id).toBe('a'); // b moved to the back, a is now first
     });
+
+    it('breaks a tied highest bet in favor of whoever reached it first in turn order, and announces the tie', () => {
+        const room = makeRoom({ starting_player_index: 0 });
+        const players = [
+            makePlayer('a', { seat_index: 0 }),
+            makePlayer('b', { seat_index: 1 }),
+            makePlayer('c', { seat_index: 2 })
+        ];
+        // b and c both bet 30000 - b comes first from starting_player_index 0.
+        const roundState = makeRoundState({ bets_json: { a: 10000, b: 30000, c: 30000 }, log_json: [] });
+
+        const transition = game.transitionToPlaying(room, players, roundState);
+        expect(transition.highestBettorId).toBe('b');
+
+        const tieEntry = roundState.log_json.find(e => e.type === 'tie_break');
+        expect(tieEntry).toBeTruthy();
+        expect(tieEntry.message).toMatch(/tied with c/);
+    });
+
+    it('does not announce a tie when there isn\'t one', () => {
+        const room = makeRoom({ starting_player_index: 0 });
+        const players = [
+            makePlayer('a', { seat_index: 0 }),
+            makePlayer('b', { seat_index: 1 })
+        ];
+        const roundState = makeRoundState({ bets_json: { a: 10000, b: 30000 }, log_json: [] });
+
+        game.transitionToPlaying(room, players, roundState);
+        expect(roundState.log_json.find(e => e.type === 'tie_break')).toBeUndefined();
+    });
 });
 
 describe('game.isBettingComplete / game.getNextBettingPlayer', () => {

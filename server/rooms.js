@@ -449,8 +449,11 @@ export class RoomManager {
         if (!room) return;
         if (room.room.host_id !== player.id) return this._sendError(ws, 'Only the host can start a new game');
 
-        // Drop bots, reset humans to a fresh lobby state, keep the same room code
-        room.players = room.players.filter(p => !p.is_bot).map(p => ({
+        // Drop bots and anyone who left/disconnected mid-game (they have no
+        // socket left to ever ready up with - keeping them would strand a
+        // permanently-unready ghost seat in the fresh lobby). Reset the
+        // rest to a fresh lobby state, same room code.
+        room.players = room.players.filter(p => !p.is_bot && p.connected).map(p => ({
             ...p,
             money_cents: game.GAME_CONSTANTS.STARTING_MONEY,
             status: 'active',

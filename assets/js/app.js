@@ -69,6 +69,14 @@ function handleSocketOpen() {
 // Setup all event listeners
 function setupEventListeners() {
     // Menu screen
+    const nameField = document.getElementById('player-name-field');
+    if (nameField) {
+        nameField.value = appState.currentUser.name;
+        nameField.addEventListener('input', () => {
+            appState.currentUser.name = nameField.value.trim();
+            storage.savePlayerName(appState.currentUser.name);
+        });
+    }
     document.getElementById('create-lobby-btn')?.addEventListener('click', handleCreateLobby);
     document.getElementById('join-lobby-btn')?.addEventListener('click', () => {
         window.location.hash = '#/join';
@@ -81,19 +89,13 @@ function setupEventListeners() {
     document.getElementById('back-from-join-btn')?.addEventListener('click', () => {
         window.location.hash = '#/menu';
     });
-    
-    // Create/Lobby screen
-    document.getElementById('ready-btn')?.addEventListener('click', handleToggleReady);
+
+    // Lobby screen
     document.getElementById('lobby-ready-btn')?.addEventListener('click', handleToggleReady);
-    document.getElementById('start-game-btn')?.addEventListener('click', handleStartGame);
     document.getElementById('host-start-btn')?.addEventListener('click', handleStartGame);
-    document.getElementById('leave-create-btn')?.addEventListener('click', handleLeaveRoom);
     document.getElementById('leave-lobby-btn')?.addEventListener('click', handleLeaveRoom);
-    
-    // Copy code buttons
-    document.getElementById('copy-code-btn')?.addEventListener('click', async () => {
-        await ui.copyWithFeedback(appState.roomCode);
-    });
+
+    // Copy code button
     document.getElementById('copy-lobby-code-btn')?.addEventListener('click', async () => {
         await ui.copyWithFeedback(appState.roomCode);
     });
@@ -156,8 +158,6 @@ function handleRoute() {
         ui.showScreen('menu-screen');
     } else if (path.startsWith('join')) {
         ui.showScreen('join-screen');
-    } else if (path.startsWith('create')) {
-        // Handled by handleCreateLobby
     } else if (path.startsWith('lobby')) {
         // Handled by joinRoom/createLobby
     } else if (path.startsWith('game')) {
@@ -184,10 +184,9 @@ function handleCreateLobby() {
 
 function handleJoinRoom() {
     const codeInput = document.getElementById('join-room-code');
-    const nameInput = document.getElementById('join-player-name');
 
     const code = codeInput?.value.trim().toUpperCase();
-    const name = nameInput?.value.trim();
+    const name = appState.currentUser.name;
 
     const nameValidation = utils.validatePlayerName(name);
     if (!nameValidation.valid) {
@@ -219,7 +218,7 @@ function handleToggleReady() {
     // Optimistic local update - the authoritative 'state' broadcast follows
     // right behind and will correct this if anything went wrong.
     myPlayer.is_ready = newReadyState;
-    const readyBtn = document.getElementById('ready-btn') || document.getElementById('lobby-ready-btn');
+    const readyBtn = document.getElementById('lobby-ready-btn');
     if (readyBtn) {
         readyBtn.textContent = newReadyState ? 'Not Ready' : 'Ready';
     }
@@ -496,7 +495,7 @@ async function executeAIPlayTurn(aiPlayer) {
     
     if (result.success) {
         aiPlayer.removeCard(cardToPlay);
-        ui.showPlayedCard(aiPlayer.seat_index, cardToPlay);
+        ui.showPlayedCard(aiPlayer.seat_index, cardToPlay, result.bust);
         ui.addLogEntry(`${aiPlayer.name} played ${cardToPlay} (total: ${result.total})`);
         updateGameUI();
         
@@ -826,7 +825,7 @@ async function handleAICardClick(cardValue) {
     }
     
     if (myPlayer) {
-        ui.showPlayedCard(myPlayer.seat_index, cardValue);
+        ui.showPlayedCard(myPlayer.seat_index, cardValue, result.bust);
     }
     ui.addLogEntry(`You played ${cardValue} (total: ${result.total})`);
     updateGameUI();
@@ -917,10 +916,10 @@ function handleStateUpdate(data) {
     storage.saveRoomCode(data.room.code);
 
     if (data.room.status === 'lobby') {
-        window.location.hash = appState.isHost ? '#/create' : '#/lobby';
-        ui.showScreen(appState.isHost ? 'create-screen' : 'lobby-screen');
-        ui.updateRoomCode(appState.isHost ? 'room-code-text' : 'lobby-room-code', data.room.code);
-        ui.renderSeats(appState.isHost ? 'create-seats-list' : 'lobby-seats-list', appState.players, appState.currentUser.playerId);
+        window.location.hash = '#/lobby';
+        ui.showScreen('lobby-screen');
+        ui.updateRoomCode('lobby-room-code', data.room.code);
+        ui.renderSeats('lobby-seats-list', appState.players, appState.currentUser.playerId);
         ui.renderLobbyScreen(appState.room, appState.players, appState.currentUser.playerId, appState.isHost);
         return;
     }
@@ -943,7 +942,7 @@ function handleStateUpdate(data) {
 
             if (entry.type === 'play_card') {
                 const p = appState.players.find(pl => pl.id === entry.playerId);
-                if (p) ui.showPlayedCard(p.seat_index, entry.cardValue);
+                if (p) ui.showPlayedCard(p.seat_index, entry.cardValue, isDanger);
             }
         }
 
@@ -986,10 +985,8 @@ function updateGameUI() {
     }
     
     // Update lobby seats if on lobby screen
-    const currentScreen = window.location.hash;
-    if (currentScreen.includes('create') || currentScreen.includes('lobby')) {
-        const containerId = currentScreen.includes('create') ? 'create-seats-list' : 'lobby-seats-list';
-        ui.renderSeats(containerId, appState.players, appState.currentUser.playerId);
+    if (window.location.hash.includes('lobby')) {
+        ui.renderSeats('lobby-seats-list', appState.players, appState.currentUser.playerId);
         ui.renderLobbyScreen(appState.room, appState.players, appState.currentUser.playerId, appState.isHost);
     }
     

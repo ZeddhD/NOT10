@@ -90,7 +90,7 @@ export function renderSeats(containerId, players, currentPlayerId) {
             seatItem.innerHTML = `
                 <div class="seat-info">
                     <div class="seat-number">${i + 1}</div>
-                    <div class="seat-name">${utils.sanitizeHTML(player.name)}${isYou ? ' (You)' : ''}${isBot ? ' 🤖' : ''}</div>
+                    <div class="seat-name">${utils.sanitizeHTML(player.name)}${isYou ? ' (You)' : ''}${isBot ? ' <span class="icon-bot" aria-label="bot"></span>' : ''}</div>
                 </div>
                 <div class="seat-status ${player.is_ready ? 'ready' : 'joined'}">
                     ${player.is_ready ? 'Ready' : 'Joined'}
@@ -122,6 +122,30 @@ export function updateRoomCode(elementId, code) {
     }
 }
 
+// Clockwise angle (deg) for each seat's position around the table ring -
+// pos-2 is at the top (0deg), pos-1 right (90deg), pos-0 bottom (180deg),
+// pos-3 left (270deg). Keep in sync with the .player-panel.pos-N rules.
+const SEAT_ANGLE = { 2: 0, 1: 90, 0: 180, 3: 270 };
+
+/**
+ * Rotate the turn-order arrow to point at whoever's turn it is.
+ * @param {Array} players - Array of player objects
+ * @param {string} turnPlayerId - ID of player whose turn it is
+ */
+export function updateTurnArrow(players, turnPlayerId) {
+    const arrow = document.getElementById('turn-arrow');
+    if (!arrow) return;
+
+    const turnPlayer = players.find(p => p.id === turnPlayerId && p.status === 'active');
+    if (!turnPlayer) {
+        arrow.style.opacity = '0';
+        return;
+    }
+    arrow.style.opacity = '1';
+    const angle = SEAT_ANGLE[turnPlayer.seat_index] ?? 0;
+    arrow.style.transform = `translateX(-50%) rotate(${angle}deg)`;
+}
+
 /**
  * Render game table with player panels
  * @param {Array} players - Array of player objects
@@ -131,6 +155,8 @@ export function updateRoomCode(elementId, code) {
  * @param {string} playingCardPlayerId - ID of player currently playing a card (optional)
  */
 export function renderGameTable(players, currentPlayerId, turnPlayerId, finalized_json = {}, playingCardPlayerId = null) {
+    updateTurnArrow(players, turnPlayerId);
+
     for (let i = 0; i < 4; i++) {
         const panel = document.getElementById(`player-${i}`);
         if (!panel) continue;
@@ -162,11 +188,11 @@ export function renderGameTable(players, currentPlayerId, turnPlayerId, finalize
             }
             if (statusEl) {
                 if (isSpectator) {
-                    statusEl.textContent = '👻 Spectating';
+                    statusEl.innerHTML = '<span class="icon-ghost" aria-hidden="true"></span> Spectating';
                 } else if (isPlayingCard) {
-                    statusEl.textContent = '🎴 Playing Card...';
+                    statusEl.textContent = 'Playing Card...';
                 } else if (hasFinalized) {
-                    statusEl.textContent = '✓ Finalized';
+                    statusEl.innerHTML = '<span class="icon-check" aria-hidden="true"></span> Finalized';
                 } else if (isTurn) {
                     statusEl.textContent = '▶ Your Turn';
                 } else {
@@ -231,29 +257,50 @@ export function updateTableTotal(total) {
  * Show played card next to player panel
  * @param {number} seatIndex - Player's seat index (0-3)
  * @param {number} cardValue - Card value played
+ * @param {boolean} isBust - Whether this card pushed the table total to the
+ *                           bust threshold - triggers the bust/reveal moment
  */
-export function showPlayedCard(seatIndex, cardValue) {
+export function showPlayedCard(seatIndex, cardValue, isBust = false) {
     const playedCardEl = document.getElementById(`played-card-${seatIndex}`);
     if (playedCardEl) {
         playedCardEl.textContent = utils.getCardDisplay(cardValue);
-        playedCardEl.classList.add('visible');
-        
-        // Apply card color styling
         playedCardEl.className = 'played-card-display visible';
-        if (cardValue === 0) {
-            playedCardEl.classList.add('card-0');
-        } else if (cardValue === 1) {
-            playedCardEl.classList.add('card-1');
-        } else if (cardValue === 2) {
-            playedCardEl.classList.add('card-2');
-        } else if (cardValue === 3) {
-            playedCardEl.classList.add('card-3');
-        }
-        
+        playedCardEl.classList.add(`card-${cardValue}`);
+
         // Auto-hide after 2 seconds
         setTimeout(() => {
             playedCardEl.classList.remove('visible');
         }, 2000);
+    }
+
+    if (isBust) {
+        triggerBustEffect(seatIndex);
+    }
+}
+
+/**
+ * The "money moment" - a busted player gets a stamped BUSTED badge on
+ * their panel and the whole screen takes a hard red flash, instead of the
+ * previous quiet number-pulse.
+ * @param {number} seatIndex - Seat index of the player who busted
+ */
+export function triggerBustEffect(seatIndex) {
+    const panel = document.getElementById(`player-${seatIndex}`);
+    if (panel) {
+        panel.querySelector('.bust-stamp')?.remove();
+        const stamp = document.createElement('div');
+        stamp.className = 'bust-stamp';
+        stamp.textContent = 'BUSTED';
+        panel.appendChild(stamp);
+        setTimeout(() => stamp.remove(), 2400);
+    }
+
+    const flash = document.getElementById('bust-flash');
+    if (flash) {
+        flash.classList.remove('firing');
+        // Force reflow so the animation restarts on consecutive busts
+        void flash.offsetWidth;
+        flash.classList.add('firing');
     }
 }
 
@@ -731,13 +778,7 @@ export function renderLobbyScreen(room, players, currentPlayerId, isHost) {
     const canStart = readyPlayers.length >= 1 && isHost;
     
     // Update start button visibility
-    if (isHost) {
-        updateButton('start-game-btn', true, canStart);
-        updateButton('host-start-btn', true, canStart);
-    } else {
-        updateButton('start-game-btn', false);
-        updateButton('host-start-btn', false);
-    }
+    updateButton('host-start-btn', isHost, canStart);
 }
 
 /**

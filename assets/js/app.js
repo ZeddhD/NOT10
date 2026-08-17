@@ -45,7 +45,7 @@ function init() {
     appState.currentUser.playerId = storage.getOrCreatePlayerId();
     appState.currentUser.name = storage.getPlayerName() || '';
 
-    wsClient.connect(handleServerMessage, handleSocketOpen);
+    wsClient.connect(handleServerMessage, handleSocketOpen, handleReplacedElsewhere);
 
     // Setup event listeners
     setupEventListeners();
@@ -71,6 +71,16 @@ function handleSocketOpen() {
     if (savedRoomCode) {
         wsClient.send({ type: 'rejoin', playerId: appState.currentUser.playerId, roomCode: savedRoomCode });
     }
+}
+
+/**
+ * Same player ID connected from another tab/window, which just took over
+ * the live connection - this tab intentionally will not auto-reconnect
+ * (see wsClient.js), so make that visible instead of leaving the screen
+ * looking frozen with no explanation.
+ */
+function handleReplacedElsewhere() {
+    ui.showToast('This game is open in another tab/window - this tab has disconnected.', 8000);
 }
 
 // Setup all event listeners

@@ -655,10 +655,12 @@ export function showGameOver(winner, allPlayers) {
         const sorted = [...allPlayers].sort((a, b) => b.money_cents - a.money_cents);
         
         sorted.forEach((player, index) => {
+            const rank = index + 1;
             const item = document.createElement('div');
-            item.className = 'standing-item';
+            item.className = `standing-item rank-${rank}`;
+            if (player.id === winner.id) item.classList.add('is-winner');
             item.innerHTML = `
-                <span class="standing-rank">#${index + 1}</span>
+                <span class="standing-rank">#${rank}</span>
                 <span class="standing-name">${utils.sanitizeHTML(player.name)}</span>
                 <span class="standing-money">${utils.formatMoney(player.money_cents)}</span>
             `;

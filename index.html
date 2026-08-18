@@ -248,10 +248,18 @@
                             <span id="your-potential-amount" class="stat-chip-value stakes">&mdash;</span>
                         </div>
                     </div>
+                    <!-- 2-player comeback bonus (see engine/game.js's
+                         computeUnderdogFactor) - only ever shown to the
+                         trailing player, heads-up, once the money gap is
+                         real. -->
+                    <div id="underdog-badge" class="underdog-badge hidden">
+                        Comeback bonus active - your bet counts extra
+                    </div>
 
                     <div class="controls-and-cards">
                         <!-- Your hand comes first - it's what you're acting on -->
                         <div class="cards-column">
+                            <p id="hand-note" class="hand-note hidden"></p>
                             <div id="hand-cards" class="hand-cards">
                                 <!-- Dynamically populated with cards -->
                             </div>

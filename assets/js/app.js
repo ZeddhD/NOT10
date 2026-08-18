@@ -365,6 +365,7 @@ function handleServerMessage(data) {
 function handleStateUpdate(data) {
     const previousRoundNo = appState.roundState?.round_no;
     const previousLogLength = appState.roundState?.log_json?.length || 0;
+    const previousHandLength = appState.myHand?.length || 0;
 
     appState.room = data.room;
     appState.players = data.players;
@@ -372,6 +373,15 @@ function handleStateUpdate(data) {
     appState.myHand = data.yourHand || [];
     appState.isHost = data.isHost;
     appState.roomCode = data.room.code;
+
+    // The rest of your hand (only half was dealt before betting - see
+    // dealRemainingHands) lands silently right when the position choice
+    // resolves and phase flips to 'playing'. Without a cue it just looks
+    // like extra cards appeared for no reason. Guarded to the same round
+    // so a genuinely new round's fresh partial deal doesn't false-trigger.
+    if (data.room.phase === 'playing' && data.roundState?.round_no === previousRoundNo && appState.myHand.length > previousHandLength) {
+        sound.playCard();
+    }
 
     storage.saveRoomCode(data.room.code);
     // The server's rejoin credential for this player - never sent to
@@ -480,6 +490,15 @@ function updateGameUI() {
 
     ui.updateYourMoney(myPlayer.money_cents);
 
+    // 2-player underdog comeback bonus (see engine/game.js) is otherwise
+    // only visible after the fact via a game-log line - surface it here
+    // too, in the moment, so winning a bet you shouldn't have doesn't
+    // just look arbitrary.
+    const activePlayersForUnderdog = appState.players.filter(p => p.status === 'active');
+    const underdogInfo = game.computeUnderdogFactor(activePlayersForUnderdog);
+    const isUnderdog = !!underdogInfo && underdogInfo.underdogId === myPlayer.id && underdogInfo.factor > 0;
+    ui.setUnderdogBadgeVisible(isUnderdog);
+
     const isMyTurn = appState.room.turn_player_id === appState.currentUser.playerId;
     const isSpectator = myPlayer.status === 'spectator';
 
@@ -488,6 +507,7 @@ function updateGameUI() {
     if (isSpectator) {
         ui.hideAllControls();
         ui.hideEarningsBreakdown();
+        ui.setHandNote(null);
         ui.showSpectatorNotice(true);
         ui.renderSpectatorStandings(appState.players, appState.currentUser.playerId);
         // Hide hand for spectators
@@ -498,7 +518,15 @@ function updateGameUI() {
     } else if (appState.room.phase === 'betting') {
         // Show hand cards during betting phase
         ui.renderHand(appState.myHand, false, null);
-        
+
+        // Only half the hand is dealt before betting closes (see
+        // dealRemainingHands) - say so, or a 2-card hand where 4 are
+        // expected reads as a bug instead of the actual design.
+        const remaining = (appState.roundState?.cards_per_player || 0) - appState.myHand.length;
+        ui.setHandNote(remaining > 0
+            ? `${remaining} more card${remaining === 1 ? '' : 's'} after the position choice`
+            : null);
+
         // Hide earnings breakdown during betting
         ui.hideEarningsBreakdown();
         
@@ -547,30 +575,38 @@ function updateGameUI() {
         }
     } else if (appState.room.phase === 'playing') {
         // Check if awaiting position choice
-        if (appState.roundState?.awaiting_position_choice && 
+        if (appState.roundState?.awaiting_position_choice &&
             appState.roundState?.highest_bettor_id === appState.currentUser.playerId) {
-            // Human player needs to choose position
+            // Human player needs to choose position - still only holding
+            // the partial hand at this point (the rest deals right after
+            // this choice resolves), so the note stays up here too.
             ui.hideAllControls();
             ui.showPositionChoice(true, appState.roundState.highest_bet);
             ui.renderHand(appState.myHand, false, null);
+            const remaining = (appState.roundState?.cards_per_player || 0) - appState.myHand.length;
+            ui.setHandNote(remaining > 0
+                ? `${remaining} more card${remaining === 1 ? '' : 's'} after the position choice`
+                : null);
         } else {
             ui.hideAllControls();
             ui.showPlayingControls(true);
             ui.renderHand(appState.myHand, isMyTurn, handleMultiplayerCardClick);
-            
+            ui.setHandNote(null);
+
             // Show potential earnings breakdown
             if (appState.roundState && appState.roundState.bets_json) {
                 ui.showEarningsBreakdown(
                     appState.players,
                     appState.currentUser.playerId,
                     appState.room.pot_cents,
-                    appState.roundState.bets_json
+                    appState.roundState
                 );
             }
         }
     } else {
         // Not betting or playing - hide earnings breakdown
         ui.hideEarningsBreakdown();
+        ui.setHandNote(null);
     }
 }
 

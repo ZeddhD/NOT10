@@ -1,5 +1,7 @@
 # NOT10 - Multiplayer Card & Betting Game
 
+### 🔗 [Play it now: not10.onrender.com](https://not10.onrender.com)
+
 > **A strategic card game where survival beats ambition. Don't be the one to hit 10!**
 
 NOT10 is a fast-paced multiplayer card and betting game with AI opponents
@@ -7,6 +9,10 @@ and an elegant dark-themed interface. The frontend is vanilla HTML/CSS/JS
 (no framework, no build step); multiplayer runs on a small self-contained
 Node.js WebSocket server with no external database - deploy it and play,
 nothing else to configure.
+
+> Free-tier hosting spins down after 15 minutes idle - the first request
+> after that can take 30-60s to wake back up. That's the server starting,
+> not the game being broken.
 
 ---
 
@@ -21,13 +27,14 @@ NOT10 is a 2-4 player card game that combines poker-style betting with strategic
 | **Deck** | 40 cards total (10 each of values: 0, 1, 2, 3) |
 | **Starting Money** | $1,000 per player |
 | **Players** | 2-4 players (human or AI) |
-| **Cards Dealt** | 4 cards (3-4 players) or 6 cards (2 players) |
-| **Minimum Bet** | $100 (or all-in if less than $100) |
+| **Cards Dealt** | 4 cards (3-4 players) or 6 cards (2 players) - but only **half** is dealt before betting; the rest deals once the position choice below resolves, so both the bet and the choice are made on a real signal, not a fully-known hand |
+| **Minimum Bet** | $100 - no free check; every player must place a real bet each round (all-in if you have less than $100) |
 | **Betting** | Incremental add-on betting (+$100, +$200, +$500) with mandatory FINALIZE |
 | **Card Play** | Players take turns playing one card; table total increases by card value |
-| **Bust Threshold** | Table total ≥10 eliminates the player who reached it |
-| **Pot Distribution** | **WEIGHTED**: Proportional to bet amount (big bets = big rewards if you survive) |
-| **Play Order Advantage** | **Highest bettor CHOOSES position** (go FIRST or LAST) |
+| **Bust Threshold** | Table total ≥10 eliminates the player who reached it (at most one elimination per round) |
+| **Pot Distribution** | **WEIGHTED**: proportional to bet amount, plus two situational bonuses (see below) |
+| **Play Order Advantage** | **Highest bettor CHOOSES position** - FIRST (riskier, +15% pot share if you survive) or LAST (safer, sees the running total before every turn, no bonus) |
+| **2-Player Comeback Bonus** | Down to a head-to-head duel? The trailing player's bet counts extra for both the position choice and the pot split, scaling with how far behind they are - keeps a lopsided 1v1 from being a foregone conclusion |
 | **Victory Condition** | Last player with money wins the game |
 
 ---
@@ -48,9 +55,15 @@ NOT10 is a 2-4 player card game that combines poker-style betting with strategic
 - **Smart Decisions**: AI uses probability-based strategies for betting and card play
 
 ### 🎨 User Experience
-- **Dark Theme**: Eye-friendly interface with smooth animations
+- **Dark Theme**: A closed 4-color palette and hard "sticker" shadows -
+  see the design-rules comment at the top of `assets/css/styles.css`
 - **Responsive Design**: Optimized for desktop, tablet, and mobile
-- **Spectator Mode**: Bankrupt players can watch the game continue
+- **Spectator Mode**: Bankrupt players get a live standings leaderboard
+  instead of their own (now irrelevant) money/payout stats
+- **Sound**: Every effect is synthesized with the Web Audio API - no audio
+  files - covering bets, card plays (pitch/urgency scale with how close
+  the total is to busting), your-turn alerts, the position-choice and
+  tie-break/underdog moments, wins, and losses. Muting persists locally.
 - **Action Log**: Track all bets, raises, and card plays in real-time
 
 ### 🔒 Security & Fair Play
@@ -68,10 +81,13 @@ NOT10 is a 2-4 player card game that combines poker-style betting with strategic
 ## 📖 Complete Gameplay Loop
 
 ### 1️⃣ **Game Start**
-- 1-4 players join a lobby and mark themselves as "Ready"
+- 1-4 players join a lobby; **every human must mark themselves "Ready"**
+  before the host can start (not just one of them)
 - Host clicks "Start Game" (works solo too - see Smart Bot Fill above)
 - Missing seats auto-fill with AI bots to reach 4 total players
-- Each active player receives their starting hand (4 cards, or 6 cards if only 2 players)
+- Each active player receives **half** their starting hand (2 of 4 cards,
+  or 3 of 6 if only 2 players) - the rest deals after the position choice
+  below resolves, not before
 
 ### 2️⃣ **Betting Phase** 💰
 Every round begins with strategic betting using the incremental system:
@@ -116,36 +132,32 @@ Betting Actions:
 
 #### 🎯 **Play Order Advantage: Highest Bettor Chooses Position**
 
-**Game-Changing Rule:** The player who bet the most during betting phase gets to **CHOOSE** their play order position - go **FIRST** or go **LAST**.
+**Game-Changing Rule:** The player who bet the most gets to **CHOOSE** their
+play order position - go **FIRST** or go **LAST** - and makes that choice
+still holding only half their hand, the same partial information the bet
+itself was placed on.
 
-**Why This Choice Matters:**
+**The actual trade-off:**
 ```
-Scenario: Table total is 7, you have [2] and [3]
+GO LAST
+- See the exact running total before every one of your turns, all round
+- Real information edge, every single lap
+- No payout bonus
 
-If you choose to GO FIRST:
-- Apply pressure early - force others to deal with higher total
-- Show confidence (intimidation factor)
-- Best when you have LOW cards (0s, 1s)
-- Risk: Less information about what's coming
-
-If you choose to GO LAST:
-- See all other players' cards first
-- Know exact table total before your turn
-- Choose [2] or [3] with perfect information
-- Best when you have HIGH/RISKY cards (2s, 3s)
+GO FIRST
+- No information edge - you commit each turn blind to what's coming
+- +15% weighted pot share if you survive the round
+- A real risk/reward trade, not just "look confident"
 ```
+GO LAST's information edge is structurally strong on its own - the FIRST
+bonus exists specifically to keep FIRST from being the strictly worse
+option once you weigh in the payout, not to make FIRST "better."
 
-**Strategic Decision Matrix:**
-- **Strong hand (all 0s, 1s)**: Choose FIRST → Put pressure on opponents, look confident
-- **Weak hand (2s, 3s)**: Choose LAST → Use information advantage to survive
-- **Mixed hand (variety)**: Depends on table dynamics and opponents' behavior
-- **Bluff opportunity**: Bet big with weak hand, choose FIRST to fake strength
-
-**Why Choice > Always Last:**
-- Adds skill-based decision making
-- Rewards players who understand position value
-- Creates mind games ("Why did they choose first?")
-- More strategic depth than fixed position
+**Down to a 2-player duel?** A trailing player's bet counts extra for both
+this choice and the pot split, scaling continuously with how far behind
+they are (nothing at close stacks, a real boost the further behind they
+fall). Money alone can't lock in the highest-bettor power every round the
+way it could in a 3-4 player game.
 
 #### 🃏 **Standard Turn Order**
 The real tension begins:
@@ -181,6 +193,12 @@ Last survivor wins the pot 💰
 Survivors receive pot share **proportional to their bet**:
 
 **Formula:** `Your Share = (Your Bet ÷ Total Survivor Bets) × Pot`
+
+Two situational multipliers apply to *this formula only* (never to the
+real money at risk): the FIRST-position bettor's bet counts as **+15%**
+for this calculation, and in a 2-player game the trailing player's bet
+counts up to **+50%** extra, scaling with how far behind they are. The
+plain example below has neither bonus in play.
 
 **Example:**
 ```
@@ -226,38 +244,47 @@ Player D: Bet $100, lost $100 = -$100 loss ❌
 **OLD System (Equal Split):** Always bet minimum
 **NEW System (Weighted):** Big bets = big rewards if you survive
 
+Remember: at bet time you've only seen **half** your hand, and betting is
+sequential (each player sees what's already been bet before acting), not
+simultaneous - so these are read on a partial signal, not a certainty.
+
 #### 🎯 **Optimal Betting Strategies**
 
-1. **Strong Hand Strategy (Multiple 0s, 1s)**
-   - **Action**: Bet aggressively ($300-$500)
-   - **Goal**: Maximize pot share when you survive
-   - **Bonus**: Get last play position advantage
-   - **Example**: With [0,0,1,1], bet $500 for huge payoff
+1. **Bet big, choose FIRST**
+   - **Goal**: Maximize pot share via the +15% FIRST bonus, if you survive
+   - **Trade-off**: You commit each turn blind - no information edge
+   - **Best when**: Your visible half-hand already looks safe, or you're
+     comfortable risking the information gap for the bigger payout
 
-2. **Weak Hand Bluff (Multiple 2s, 3s)**
-   - **Action**: Bet $200-$300 to secure last position
-   - **Goal**: Play last = see others' cards first
-   - **Risk**: Bigger loss if you bust
-   - **When**: Table likely to go high (many players still in)
+2. **Bet big, choose LAST**
+   - **Goal**: See the exact running total before every one of your turns,
+     all round - no payout bonus, just survival odds
+   - **Trade-off**: Gives up the FIRST bonus entirely
+   - **Best when**: Your visible half-hand looks risky and you want every
+     edge to avoid busting once the rest of your hand is dealt
 
-3. **Safe Play (Moderate Hand)**
-   - **Action**: Bet minimum $100
+3. **Safe Play (minimum bet)**
    - **Goal**: Minimize loss if you bust
-   - **Result**: Small profit if you survive
-   - **When**: Uncertain about hand strength
+   - **Result**: Small profit if you survive, no position choice either way
+   - **When**: Uncertain, or happy to let someone else take the power
 
 4. **Forced All-In (<$100)**
-   - **Bluff**: Act confident even with bad hand
-   - **Fold**: Others might overbet and bust
-   - **Bonus**: If multiple survivors, you get small share
+   - No choice in the matter - you're in regardless
+   - If multiple players survive, you still get a share proportional to
+     what you had left
+
+5. **Down to 2 players and badly behind?**
+   - Your bet is already counting for more than it looks (see the
+     comeback bonus above) - you don't need to match the leader dollar
+     for dollar to still win the position choice or a bigger pot share
 
 #### ⚡ **Advanced Tactics**
 
 - **First Bet Matters**: You can't finalize until you bet at least once - use this wisely
-- **Incremental Building**: Bet +$100, +$100, +$200 across turns to apply gradual pressure
-- **Position Bidding**: Bet $300+ just to secure last play position (worth it with 2s and 3s)
-- **Pot Building**: With strong hand, bet high early to encourage others to match
-- **Low Money Pressure**: Being forced to all-in with <$100 creates desperate bluffing opportunities
+- **Incremental Building**: Bet +$100, +$100, +$200 across turns rather than one lump raise
+- **Position Bidding**: Betting the most doesn't just buy pot share - it buys the position choice, so a close decision on amount can be worth tipping toward "enough to win the choice"
+- **Pot Building**: With a safe-looking hand, bet high early to encourage others to match
+- **Low Money Pressure**: Being forced to all-in with <$100 removes any further decision-making that round
 - **Survivor Count Math**: Fewer survivors = larger pot share per person
 
 ### Card Playing Tactics
@@ -374,7 +401,7 @@ NOT10/
 ├── render.yaml                  # Declarative Render (Docker web service) deploy config
 │
 ├── engine/                     # Pure rules engine - no network/DOM
-│   ├── game.js                 # Betting, card play, bust detection, pot distribution
+│   ├── game.js                 # Betting, card play, bust detection, weighted pot distribution
 │   ├── ai.js                    # AI personalities (bots + auto-piloted disconnects)
 │   └── utils.js                 # Deck/shuffle/turn-order helpers
 │
@@ -383,21 +410,21 @@ NOT10/
 │   └── rooms.js                  # In-memory RoomManager: rooms, reconnection, bot control
 │
 ├── assets/
+│   ├── favicon.svg             # Browser-tab icon
 │   ├── css/
 │   │   └── styles.css         # Complete styling + design rules (top comment)
 │   │
 │   └── js/
 │       ├── app.js             # Controller: routing, UI wiring, WS message handling
 │       ├── ui.js              # UI rendering functions (pure presentation)
+│       ├── sound.js            # Web Audio-synthesized SFX - no audio files
 │       ├── wsClient.js         # WebSocket transport (connect/reconnect/send)
 │       └── storage.js         # LocalStorage utilities (player id, session)
 │
-├── tests/
-│   └── game.test.js           # Headless unit tests for engine/game.js
-│
-└── scripts/
-    ├── smoke-test.js            # Live WebSocket check: solo game, bot-fill, full round
-    └── smoke-test-2p.js         # Live check: 2-human bot-fill count + reconnection
+└── tests/
+    ├── game.test.js            # Headless unit tests for engine/game.js
+    ├── ai.test.js               # Headless unit tests for engine/ai.js
+    └── server.test.js           # Integration tests: real HTTP + WebSocket server, real ws clients
 ```
 
 ---
@@ -406,14 +433,16 @@ NOT10/
 
 ### Game Logic (`engine/game.js`)
 ```javascript
-startNewRound()       // Initialize round, deal cards, set starting player
-processBet()          // Handle bets, calls, all-ins, and finalizations
-processCardPlay()     // Process card plays, check bust condition
-endRound()            // Weighted pot distribution, rotate starting player
-isBettingComplete()   // Check if all active players have finalized
-transitionToPlaying() // Move from betting to playing phase
-applyPositionChoice() // Apply the highest bettor's first/last choice
-checkGameOver()        // Only one player left with money?
+startNewRound()          // Deal HALF each hand, set starting player, open betting
+processBet()             // Handle bets, calls, all-ins, and finalizations
+transitionToPlaying()    // Highest bettor decided (true chronological tie-break), betting closes
+applyPositionChoice()    // Apply the highest bettor's FIRST/LAST choice
+dealRemainingHands()     // Top every hand up to full size - only after the choice above
+processCardPlay()        // Process card plays, check bust condition
+endRound()               // Weighted pot distribution (FIRST + underdog bonuses), rotate starting player
+computeUnderdogFactor()  // 2-player-only comeback dial - null at 3-4 players
+isBettingComplete()      // Check if all active players have finalized
+checkGameOver()           // Only one player left with money?
 ```
 Every function above is pure and synchronous - it mutates the room/player
 objects it's given and returns a plain result. It never touches the
@@ -447,64 +476,84 @@ control - one implementation, no drift between the two.
 
 ### WebSocket Transport (`assets/js/wsClient.js`)
 ```javascript
-connect(onMessage, onOpen)  // Opens the socket, auto-reconnects with backoff
-send(payload)                 // Sends (or queues, if mid-reconnect) a message
+connect(onMessage, onOpen, onReplaced)  // Opens the socket, auto-reconnects with backoff;
+                                         // onReplaced fires if another tab took over this player
+send(payload)                            // Sends (or queues, if mid-reconnect) a message
 ```
+
+### Sound (`assets/js/sound.js`)
+```javascript
+playBet() / playConfirm() / playAllIn()   // Betting actions
+playCard(urgency)                          // Card played - pitch/gain scale with bust proximity
+playDeal()                                 // Silent hand top-up after the position choice
+playYourTurn()                             // Fires once on the transition into your turn
+playPositionChoiceEarned()                 // You just became the highest bettor
+playSpecialMoment()                        // Tie-break / underdog-bonus moments
+playBust() / playWin() / playGameOver()   // Round/game-ending moments
+```
+Every sound is a synthesized Web Audio oscillator envelope - no audio
+files. Muting persists to `localStorage`.
 
 ### UI Rendering (`ui.js`)
 ```javascript
-renderSeats()        // Show players in lobby
-renderGameTable()    // Display player panels with finalized indicators
-renderHand()         // Show player's cards
-updatePlayerBets()   // Update bet displays
-showPlayedCard()     // Show played card next to player panel
-addLogEntry()        // Add action to game log
-showGameOver()       // Display winner & final standings
+renderSeats()               // Show players in lobby
+renderGameTable()           // Display player panels with finalized indicators
+renderHand()                // Show player's cards
+setHandNote()                // "N more cards after the position choice" during the partial deal
+updatePlayerBets()           // Update bet displays
+showPlayedCard()             // Show played card next to player panel
+setUnderdogBadgeVisible()    // 2-player comeback bonus indicator
+renderSpectatorStandings()   // Live leaderboard for eliminated players
+addLogEntry()                 // Add action to game log
+showGameOver()                // Display winner & final standings
 ```
 
 ---
 
 ## 🧪 Testing
 
-`engine/game.js` is a pure rules engine - no network, no storage, no DOM -
-so it has a headless unit test suite that runs in milliseconds:
-
 ```bash
 npm install
 npm test
 ```
 
-`tests/game.test.js` covers deck/shuffle integrity, every betting action
-(bet/call/all-in/finalize) including its failure paths, bust detection,
-weighted pot distribution and its rounding-remainder handling, game-over
-detection, and position-choice turn ordering.
+71 tests across three files:
 
-For anything that depends on timing, concurrency, or the actual network
-protocol - which a unit test can't see - there are throwaway, scripted
-live checks against a running server:
-
-```bash
-npm start                       # in one terminal
-node scripts/smoke-test.js      # in another: solo game, 3-bot fill, full round
-node scripts/smoke-test-2p.js   # 2-human bot-fill count + mid-game reconnect
-```
+- **`tests/game.test.js`** (headless, no network/DOM) - deck/shuffle
+  integrity, every betting action (bet/call/all-in/finalize) including
+  its failure paths, the partial-deal/reveal sequence, bust detection,
+  weighted pot distribution (including the FIRST and 2-player underdog
+  bonuses, and rounding-remainder handling), tie-breaking by true
+  chronological action order, game-over detection, and position-choice
+  turn ordering.
+- **`tests/ai.test.js`** (headless) - the pot-odds/survivor confidence
+  blend, raise-affordability math, and position-choice edge cases.
+- **`tests/server.test.js`** (integration - spins up a real HTTP +
+  WebSocket server in-process and drives it with real `ws` client
+  connections) - solo bot-fill, ALL-IN/money-emptying auto-finalize,
+  GO FIRST/LAST play order holding for a whole round, a human leaving
+  mid-game, duplicate-tab connection handling, session-token rejoin
+  security, hands-exhausted pushes, join-room idempotency, and the
+  all-humans-ready-to-start requirement. This is the suite that's
+  historically caught the bugs a headless test can't see - timing,
+  concurrency, and the actual WebSocket protocol.
 
 **What this does NOT verify** (the honest gap, updated as it changes):
-- Anything purely visual/client-side in `ui.js` or `styles.css` - the
-  card animations, position-choice screen, spectator view, etc. have
-  only been checked by reading the code, not by opening a browser.
-- Long-running stability - the smoke tests exercise one room for one or
-  two rounds; they don't prove behavior under many concurrent rooms or
-  over hours of uptime.
+- Anything purely visual/client-side in `ui.js`, `sound.js`, or
+  `styles.css` - there is currently zero automated test coverage for the
+  client. Every UI/sound change has been checked by reading the code and
+  confirming files load/parse, not by opening a browser and using it.
+- Long-running stability - the integration suite exercises a handful of
+  rooms for one or two rounds each; it doesn't prove behavior under many
+  concurrent rooms or over hours of uptime.
 - The `Room` class's behavior under truly pathological timing (e.g. a
   player disconnecting at the exact moment their grace-period timer
-  would have fired) - plausible edge cases exist that neither the unit
-  tests nor the smoke tests specifically target.
+  would have fired) - plausible edge cases exist that nothing in this
+  suite specifically targets yet.
 
-A clean `npm test` run means the rules are correct in isolation; the
-smoke tests mean the protocol and bot/reconnect timing work in the
-scenarios they actually exercise - neither is a substitute for someone
-playing a real multi-tab game before a game night that matters.
+A clean `npm test` run means the rules and the multiplayer protocol are
+correct in the scenarios actually exercised - it is not a substitute for
+someone playing a real multi-tab game before a game night that matters.
 
 ---
 
@@ -551,14 +600,16 @@ playing a real multi-tab game before a game night that matters.
 
 ### Change Theme Colors
 Edit CSS variables in `assets/css/styles.css` (see the design-rules
-comment at the top of the file for what each color is allowed to mean):
+comment at the top of the file for what each color is allowed to mean -
+it's a closed 4-color palette, each color has exactly one job):
 ```css
 :root {
-    --bg-dark: #0a0e1a;
-    --bg-medium: #1a1f35;
-    --accent: #00d9ff;
-    --success: #00ff88;
-    --danger: #ff0055;
+    --color-bg-primary: #150f1e;
+    --color-ink: #0b0810;
+    --color-accent: #ffb703;   /* gold - your turn, primary actions */
+    --color-success: #2bd97c;  /* green - finalized/safe */
+    --color-danger: #ff3b4e;   /* red - bust/leave */
+    --color-stakes: #ff8f3f;   /* orange - money at risk (pot, bets) */
 }
 ```
 
@@ -568,9 +619,12 @@ offline AI mode and the multiplayer server, so a change here applies
 everywhere):
 ```javascript
 export const GAME_CONSTANTS = {
-    STARTING_MONEY: 100000,    // $1000
-    BUST_THRESHOLD: 10,        // Change bust limit
-    RAISE_AMOUNTS: [10000, 20000, 50000] // Bet increments
+    STARTING_MONEY: 100000,             // $1000
+    BUST_THRESHOLD: 10,                 // Change bust limit
+    RAISE_AMOUNTS: [10000, 20000, 50000], // Bet increments
+    FIRST_POSITION_BONUS: 1.15,         // +15% weighted pot share for choosing FIRST
+    UNDERDOG_POSITION_BOOST_MAX: 1.0,   // 2-player comeback: up to +100% effective bet weight
+    UNDERDOG_POT_SHARE_BOOST_MAX: 0.5   // 2-player comeback: up to +50% weighted pot share
 };
 ```
 
@@ -585,14 +639,15 @@ Adjust AI personalities in `engine/ai.js`:
 
 ## 🌟 Future Enhancement Ideas
 
+- [ ] Automated client-side tests (`app.js`/`ui.js`/`sound.js` currently
+      have zero test coverage - see Testing above)
 - [ ] Tournaments with bracket system
 - [ ] Player statistics tracking
 - [ ] Achievements and badges
-- [ ] Sound effects and music
+- [ ] Background music (sound *effects* are already in - see Key Features)
 - [ ] Chat system
 - [ ] Replay system
 - [ ] Custom deck designs
-- [ ] Animated card dealing
 - [ ] Leaderboards
 - [ ] Optional persistence (so a restart doesn't drop in-progress games)
 

@@ -59,13 +59,13 @@ Mac/Linux), then have other players on the same WiFi visit
 npm test
 ```
 
-Headless engine tests (`tests/game.test.js`, Vitest) - no server, no
-browser, no network. See README's Testing section for what this does and
-doesn't cover, and `scripts/smoke-test.js` / `scripts/smoke-test-2p.js`
-for the live, scripted checks that exercise the parts a unit test can't
-(reconnection, bot timing, the full WebSocket protocol) - run those
-against a locally running server (`npm start` in one terminal,
-`node scripts/smoke-test.js` in another).
+Three Vitest files: `tests/game.test.js` and `tests/ai.test.js` are
+headless (no server, no browser, no network); `tests/server.test.js`
+spins up a real HTTP + WebSocket server in-process and drives it with
+real `ws` client connections - the part a headless test can't reach
+(reconnection, bot timing, the full WebSocket protocol, duplicate-tab
+handling). See README's Testing section for what the whole suite does
+and doesn't cover.
 
 ---
 

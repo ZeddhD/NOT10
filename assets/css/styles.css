@@ -2175,14 +2175,33 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 /* === How to Play - redesigned for a one-read skim, not a manual === */
+/* Was a standalone gold-bordered paragraph - the loudest box in the
+   whole modal despite being the least actionable content in it, with no
+   visual relationship to the numbered steps right below it. Now built
+   from the exact same icon-circle + text-panel structure as .howto-step
+   (below), just with a trophy in place of a number, so it reads as the
+   lead-in to that list ("step 0: the goal") instead of a competing,
+   differently-styled box bolted on top of it. */
 .howto-goal {
-    text-align: center;
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-md);
     background: var(--color-bg-tertiary);
-    border: var(--border-thick) solid var(--color-accent);
     border-radius: var(--radius-md);
-    padding: var(--spacing-md) var(--spacing-lg);
-    font-size: 1.05rem;
+    padding: var(--spacing-md);
     margin-bottom: var(--spacing-lg);
+}
+
+.howto-goal p {
+    margin: 0;
+}
+
+.howto-goal-icon {
+    flex-shrink: 0;
+    width: 1.8em;
+    height: 1.8em;
+    color: var(--color-accent);
+    filter: drop-shadow(2px 2px 0 var(--color-ink));
 }
 
 .howto-steps {

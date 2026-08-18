@@ -447,11 +447,17 @@ h1, h2, h3, h4, h5, h6 {
     text-align: center;
 }
 
+/* Same four card-value colors as the logo's pip strip, one per quarter-
+   arc, instead of a single gold arc - the loading spinner reads as "the
+   deck itself" before you've even seen a card. */
 .loading-spinner {
     width: 60px;
     height: 60px;
-    border: var(--border-thicker) solid var(--color-bg-tertiary);
-    border-top: var(--border-thicker) solid var(--color-accent);
+    border: var(--border-thicker) solid transparent;
+    border-top-color: var(--card-0);
+    border-right-color: var(--card-1);
+    border-bottom-color: var(--card-2);
+    border-left-color: var(--card-3);
     border-radius: 50%;
     animation: spin 0.8s linear infinite;
     margin: var(--spacing-xl) auto;

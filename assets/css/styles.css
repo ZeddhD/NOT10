@@ -506,7 +506,10 @@ h1, h2, h3, h4, h5, h6 {
 .fan-card-3 { transform: rotate(14deg) translateY(8px); }
 
 .menu-name-input {
-    max-width: 320px;
+    /* Matches .btn-large's own max-width below it - was 320px, leaving
+       the input narrower than every button under it with a visible jog
+       where their right edges should have lined up. */
+    max-width: 400px;
     margin: 0 auto var(--spacing-xl);
     text-align: left;
 }
@@ -571,7 +574,15 @@ h1, h2, h3, h4, h5, h6 {
     text-align: center;
 }
 
-.player-name-input label {
+/* One shared input style for every text field in the app (name, room
+   code, etc.) - previously .player-name-input and .form-group each had
+   their own near-duplicate copy, and both used a border color barely
+   distinguishable from their own background with no shadow at all, so
+   every input in the game looked like a generic web form field instead
+   of the same ink-border + hard-shadow "sticker" language every button
+   already uses (compare to .stat-chip, which gets this right). */
+.player-name-input label,
+.form-group label {
     display: block;
     color: var(--color-text-secondary);
     font-size: 0.875rem;
@@ -581,20 +592,25 @@ h1, h2, h3, h4, h5, h6 {
     letter-spacing: 0.05em;
 }
 
-.player-name-input input {
+.player-name-input input,
+.form-group input {
     width: 100%;
     padding: var(--spacing-md);
-    background: var(--color-bg-primary);
-    border: var(--border-thick) solid var(--color-bg-tertiary);
+    background: var(--color-bg-tertiary);
+    border: var(--border-thick) solid var(--color-ink);
     border-radius: var(--radius-md);
     color: var(--color-text-primary);
     font-size: 1rem;
     font-weight: 600;
+    box-shadow: var(--shadow-sm);
+    transition: box-shadow var(--transition-fast), border-color var(--transition-fast);
 }
 
-.player-name-input input:focus {
+.player-name-input input:focus,
+.form-group input:focus {
     outline: none;
     border-color: var(--color-accent);
+    box-shadow: var(--shadow-md);
 }
 
 /* Seats */
@@ -716,32 +732,6 @@ h1, h2, h3, h4, h5, h6 {
 
 .form-group {
     margin-bottom: var(--spacing-lg);
-}
-
-.form-group label {
-    display: block;
-    color: var(--color-text-secondary);
-    font-size: 0.875rem;
-    font-weight: 700;
-    margin-bottom: var(--spacing-sm);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-}
-
-.form-group input {
-    width: 100%;
-    padding: var(--spacing-md);
-    background: var(--color-bg-tertiary);
-    border: var(--border-thick) solid var(--color-bg-primary);
-    border-radius: var(--radius-md);
-    color: var(--color-text-primary);
-    font-size: 1rem;
-    font-weight: 600;
-}
-
-.form-group input:focus {
-    outline: none;
-    border-color: var(--color-accent);
 }
 
 .error-message {

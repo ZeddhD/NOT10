@@ -1932,7 +1932,10 @@ h1, h2, h3, h4, h5, h6 {
         var(--color-bg-secondary);
     padding: calc(var(--spacing-xxl) + 0.75rem) var(--spacing-xl) var(--spacing-xl);
     border-radius: var(--radius-lg);
-    border: var(--border-thicker) solid var(--color-accent);
+    /* Ink, not gold - matches .final-standings below it. The inner
+       winner-name-card keeps the gold border; two concentric gold frames
+       here read as a mistake, not a deliberate container -> focus layer. */
+    border: var(--border-thicker) solid var(--color-ink);
     margin-bottom: var(--spacing-xl);
     box-shadow: var(--shadow-pop);
 }

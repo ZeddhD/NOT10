@@ -2196,12 +2196,24 @@ h1, h2, h3, h4, h5, h6 {
     margin: 0;
 }
 
-.howto-goal-icon {
+/* Same stamped-badge language as the Game Over screen's CHAMPION badge -
+   gold, ink-bordered, tilted - just static here (no drop-in animation,
+   this isn't a one-time reveal) since it's shown every time the modal
+   opens, not once at the end of a game. */
+.howto-goal-stamp {
     flex-shrink: 0;
-    width: 1.8em;
-    height: 1.8em;
-    color: var(--color-accent);
-    filter: drop-shadow(2px 2px 0 var(--color-ink));
+    background: var(--color-accent);
+    color: var(--color-ink);
+    font-family: var(--font-display);
+    font-size: 0.8rem;
+    font-weight: 900;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    padding: 0.4rem 0.75rem;
+    border: 2px solid var(--color-ink);
+    border-radius: var(--radius-sm);
+    box-shadow: var(--shadow-sm);
+    transform: rotate(-8deg);
 }
 
 .howto-steps {

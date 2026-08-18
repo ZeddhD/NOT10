@@ -91,9 +91,67 @@ export function playAllIn() {
     vibrate([15, 30, 15]);
 }
 
-// A short, dry percussive tap - a card landing on the table.
-export function playCard() {
-    tones([{ freq: 180, duration: 0.06, type: 'square', gain: 0.08 }]);
+// A short, dry percussive tap - a card landing on the table. Pitch and
+// gain climb with urgency (0 = table total just reset, 1 = this card
+// pushed the total to the bust threshold) so the sound itself carries the
+// tension of a near-miss instead of every play sounding identical
+// regardless of how close to busting it was.
+export function playCard(urgency = 0) {
+    const u = Math.max(0, Math.min(1, urgency));
+    tones([{
+        freq: 180 + u * 240,
+        duration: 0.06 + u * 0.03,
+        type: 'square',
+        gain: 0.08 + u * 0.06
+    }]);
+    if (u >= 0.8) vibrate([10]);
+}
+
+// A fresh card silently landing in your hand (the second half of the deal,
+// dealt right after the position choice resolves) - distinct from playCard
+// since nothing was actually *played*, just dealt.
+export function playDeal() {
+    tones([
+        { freq: 260, duration: 0.05, type: 'triangle', gain: 0.09 },
+        { freq: 330, duration: 0.06, type: 'triangle', gain: 0.09, delay: 0.04 }
+    ]);
+}
+
+// It's your turn - the one cue in this file that exists purely to get
+// your attention if you looked away, not to react to something you did.
+// Deliberately the brightest/shortest sound in the set so it reads as
+// "look now" rather than blending into the rest of the game's tones.
+export function playYourTurn() {
+    tones([
+        { freq: 587, duration: 0.07, type: 'sine', gain: 0.13 },
+        { freq: 784, duration: 0.09, type: 'sine', gain: 0.15, delay: 0.08 }
+    ]);
+    vibrate([15]);
+}
+
+// You won the highest-bettor power and get to choose FIRST/LAST - one of
+// the biggest moments in a round, previously silent until the moment you
+// actually clicked a choice. A short fanfare, distinct from playWin (that
+// stays reserved for actually winning the game).
+export function playPositionChoiceEarned() {
+    tones([
+        { freq: 440, duration: 0.1, type: 'triangle', gain: 0.13 },
+        { freq: 554, duration: 0.1, type: 'triangle', gain: 0.14, delay: 0.09 },
+        { freq: 698, duration: 0.16, type: 'triangle', gain: 0.15, delay: 0.18 }
+    ]);
+    vibrate([15, 15, 25]);
+}
+
+// A tie-break or the 2-player underdog bonus deciding the highest-bettor
+// power - rare, dramatic table-wide moments that previously only showed up
+// as a game-log line. A short, slightly odd two-note sting (minor second)
+// so it reads as "something unusual just happened," distinct from every
+// other cue in the set.
+export function playSpecialMoment() {
+    tones([
+        { freq: 415, duration: 0.1, type: 'sine', gain: 0.12 },
+        { freq: 466, duration: 0.18, type: 'sine', gain: 0.13, delay: 0.1 }
+    ]);
 }
 
 // The bust/reveal "money moment" - a hard downward sting.

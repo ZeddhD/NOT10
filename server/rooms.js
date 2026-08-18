@@ -17,6 +17,14 @@ import * as ai from '../engine/ai.js';
 import * as utils from '../engine/utils.js';
 
 const DISCONNECT_GRACE_MS = 30_000;
+// A dropped connection mid-turn used to hand control to the AI the instant
+// `connected` flipped false - often well under a second after a phone
+// locked or a WiFi blip hit, robbing a human of a turn they were about to
+// take themselves and about to reconnect for anyway. This is a separate,
+// much shorter window than DISCONNECT_GRACE_MS (which governs when a lobby
+// seat gets freed) - it only delays the AI stepping in, never how long the
+// seat itself is held.
+const AUTOPILOT_GRACE_MS = 5_000;
 const IDLE_ROOM_REAP_MS = 2 * 60 * 60 * 1000; // 2 hours
 const REAP_CHECK_MS = 5 * 60 * 1000;
 const TURN_TICK_MS = 1000;
@@ -140,7 +148,10 @@ export class RoomManager {
 
         room.sockets.delete(meta.playerId);
         const player = room.players.find(p => p.id === meta.playerId);
-        if (player) player.connected = false;
+        if (player) {
+            player.connected = false;
+            player.disconnectedAt = Date.now();
+        }
         this._broadcast(room);
 
         const timer = setTimeout(() => this._resolveDisconnect(room, meta.playerId), DISCONNECT_GRACE_MS);
@@ -260,6 +271,7 @@ export class RoomManager {
         }
 
         player.connected = true;
+        player.disconnectedAt = null;
         this._attachSocket(room, ws, playerId);
         this._broadcast(room);
     }
@@ -303,7 +315,12 @@ export class RoomManager {
             // pointing at someone who no longer exists, freezing the game
             // for everyone left. Leave them seated but server-piloted.
             const player = room.players.find(p => p.id === meta.playerId);
-            if (player) player.connected = false;
+            if (player) {
+                player.connected = false;
+                // Explicit "Leave" means they're not coming back - skip the
+                // AUTOPILOT_GRACE_MS reconnect window a real drop gets.
+                player.disconnectedAt = 0;
+            }
             this._broadcast(room);
             return;
         }
@@ -579,7 +596,7 @@ export class RoomManager {
         if (!turnPlayerId) return;
         const turnPlayer = room.players.find(p => p.id === turnPlayerId);
         if (!turnPlayer || turnPlayer.status !== 'active') return;
-        if (turnPlayer.is_bot || !turnPlayer.connected) {
+        if (turnPlayer.is_bot || this._isPastAutopilotGrace(turnPlayer)) {
             room.turnLoopBusy = true;
             try {
                 if (room.room.phase === 'betting') {
@@ -591,6 +608,16 @@ export class RoomManager {
                 room.turnLoopBusy = false;
             }
         }
+    }
+
+    // True once a disconnected human's turn is actually fair game for the
+    // AI to take over - immediately for bots (checked separately by
+    // callers), but only after AUTOPILOT_GRACE_MS for a human, so a
+    // connection blip that resolves in a couple seconds doesn't cost them
+    // a turn they were about to take themselves.
+    _isPastAutopilotGrace(player) {
+        if (player.connected) return false;
+        return Date.now() - (player.disconnectedAt || 0) >= AUTOPILOT_GRACE_MS;
     }
 
     async _autoBet(room, player) {
@@ -672,7 +699,8 @@ export class RoomManager {
         if (room.positionChoiceBusy) return;
         const bettorId = room.roundState?.highest_bettor_id;
         const bettor = room.players.find(p => p.id === bettorId);
-        if (!bettor || (!bettor.is_bot && bettor.connected)) return; // a connected human chooses themselves
+        if (!bettor) return;
+        if (!bettor.is_bot && !this._isPastAutopilotGrace(bettor)) return; // give a connected/just-dropped human the chance to choose themselves
 
         room.positionChoiceBusy = true;
         try {

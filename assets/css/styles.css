@@ -1318,6 +1318,26 @@ h1, h2, h3, h4, h5, h6 {
     display: none;
 }
 
+/* 2-player comeback bonus badge - stakes-colored (money-related, like the
+   pot) rather than accent-gold, so it doesn't compete with the "your
+   turn"/highlight gold used everywhere else. */
+.underdog-badge {
+    background: var(--color-bg-tertiary);
+    border: var(--border-thick) solid var(--color-stakes);
+    color: var(--color-stakes);
+    border-radius: var(--radius-md);
+    padding: var(--spacing-sm) var(--spacing-md);
+    margin-bottom: var(--spacing-lg);
+    font-size: 0.8rem;
+    font-weight: 800;
+    text-align: center;
+    box-shadow: var(--shadow-sm);
+}
+
+.underdog-badge.hidden {
+    display: none;
+}
+
 .stat-chip {
     flex: 1 1 180px;
     background: var(--color-bg-tertiary);
@@ -1478,6 +1498,21 @@ h1, h2, h3, h4, h5, h6 {
 
 .custom-bet-input::placeholder {
     color: var(--color-text-dim);
+}
+
+/* Note during betting/position-choice that only half the hand has been
+   dealt so far - without it, a 2-card hand where 4 are expected reads as
+   a bug rather than the intended partial-deal design. */
+.hand-note {
+    font-size: 0.8rem;
+    font-weight: 600;
+    font-style: italic;
+    color: var(--color-text-dim);
+    margin-bottom: var(--spacing-sm);
+}
+
+.hand-note.hidden {
+    display: none;
 }
 
 /* Hand Cards */

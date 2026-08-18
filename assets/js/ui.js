@@ -4,6 +4,10 @@
  */
 
 import * as utils from './utils.js';
+// Reused so the "Potential Earnings" preview applies the exact same FIRST/
+// underdog bonus math endRound does server-side, instead of a hand-copied
+// version that can silently drift out of sync with it.
+import * as game from '../../engine/game.js';
 
 /**
  * Show a specific screen and hide others
@@ -367,6 +371,25 @@ export function updatePhaseIndicator(phase) {
 }
 
 /**
+ * Note above the hand explaining a partial deal during betting (only half
+ * the hand is dealt before betting closes - see dealRemainingHands) so a
+ * smaller-than-expected hand reads as intentional, not a bug. Pass null to
+ * clear/hide it.
+ * @param {string|null} text
+ */
+export function setHandNote(text) {
+    const el = document.getElementById('hand-note');
+    if (!el) return;
+    if (!text) {
+        el.classList.add('hidden');
+        el.textContent = '';
+        return;
+    }
+    el.textContent = text;
+    el.classList.remove('hidden');
+}
+
+/**
  * Render player hand cards
  * @param {Array<number>} hand - Array of card values
  * @param {boolean} enabled - Are cards clickable
@@ -502,6 +525,17 @@ export function showPositionChoice(show, betAmount = 0) {
  */
 export function setYourStatsBarVisible(visible) {
     document.getElementById('your-stats-bar')?.classList.toggle('hidden', !visible);
+}
+
+/**
+ * Show/hide the 2-player comeback-bonus badge (see
+ * engine/game.js's computeUnderdogFactor) - otherwise the only sign this
+ * is active is a game-log line after the fact, which makes winning a bet
+ * you shouldn't have look arbitrary in the moment.
+ * @param {boolean} visible
+ */
+export function setUnderdogBadgeVisible(visible) {
+    document.getElementById('underdog-badge')?.classList.toggle('hidden', !visible);
 }
 
 /**
@@ -855,27 +889,43 @@ export function initGameScreen() {
  * @param {Array} players - All players
  * @param {string} currentPlayerId - Current player's ID
  * @param {number} potCents - Current pot in cents
- * @param {Object} bets - Bets object mapping player IDs to bet amounts
+ * @param {Object} roundState - Current round state (bets_json, position_choice, highest_bettor_id)
  */
-export function showEarningsBreakdown(players, currentPlayerId, potCents, bets) {
+export function showEarningsBreakdown(players, currentPlayerId, potCents, roundState) {
     const container = document.getElementById('earnings-breakdown');
     if (!container) return;
-    
+
     // Only show during playing phase
     const activePlayers = players.filter(p => p.status === 'active');
     if (activePlayers.length <= 1) {
         container.classList.add('hidden');
         return;
     }
-    
+
     // Calculate potential earnings for each opponent elimination
     const currentPlayer = players.find(p => p.id === currentPlayerId);
     if (!currentPlayer) {
         container.classList.add('hidden');
         return;
     }
-    
-    const currentPlayerBet = bets[currentPlayerId] || 0;
+
+    const bets = roundState.bets_json || {};
+    // Same weighting endRound actually pays out with - not a hand-copied
+    // approximation - so this preview never understates a bonus and drifts
+    // out of sync with the real payout.
+    const firstBonusPlayerId = roundState.position_choice === 'first' ? roundState.highest_bettor_id : null;
+    const underdogInfo = game.computeUnderdogFactor(activePlayers);
+    const weightedBet = (playerId) => {
+        let bet = bets[playerId] || 0;
+        if (playerId === firstBonusPlayerId) {
+            bet = Math.round(bet * game.GAME_CONSTANTS.FIRST_POSITION_BONUS);
+        }
+        if (underdogInfo && playerId === underdogInfo.underdogId) {
+            bet = Math.round(bet * (1 + underdogInfo.factor * game.GAME_CONSTANTS.UNDERDOG_POT_SHARE_BOOST_MAX));
+        }
+        return bet;
+    };
+
     const opponents = activePlayers.filter(p => p.id !== currentPlayerId);
 
     container.innerHTML = '<h4>Potential Earnings by Scenario</h4>';
@@ -886,19 +936,19 @@ export function showEarningsBreakdown(players, currentPlayerId, potCents, bets) 
         // Calculate earnings if this opponent is eliminated
         const survivors = activePlayers.filter(p => p.id !== opponent.id);
         const totalSurvivorBets = survivors.reduce((sum, survivor) => {
-            return sum + (bets[survivor.id] || 0);
+            return sum + weightedBet(survivor.id);
         }, 0);
-        
+
         let earnings;
         if (totalSurvivorBets === 0) {
             // Equal split if no bets
             earnings = Math.floor(potCents / survivors.length);
         } else {
             // Weighted distribution
-            const proportion = currentPlayerBet / totalSurvivorBets;
+            const proportion = weightedBet(currentPlayerId) / totalSurvivorBets;
             earnings = Math.floor(potCents * proportion);
         }
-        
+
         const itemDiv = document.createElement('div');
         itemDiv.className = 'earnings-item';
         

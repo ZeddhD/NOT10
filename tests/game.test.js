@@ -382,6 +382,50 @@ describe('game.endRound - weighted pot distribution', () => {
         expect(room.starting_player_index).toBe(0); // (3 + 1) % 4
     });
 
+    it('gives the highest bettor who chose FIRST a bigger pot share via a weighted bet, even with an equal real bet', () => {
+        const room = makeRoom({ pot_cents: 100000, starting_player_index: 0 });
+        const players = [
+            makePlayer('a', { money_cents: 0 }),
+            makePlayer('b', { money_cents: 0 })
+        ];
+        const roundState = makeRoundState({
+            bets_json: { a: 50000, b: 50000 },
+            highest_bettor_id: 'a',
+            position_choice: 'first'
+        });
+
+        const result = game.endRound(room, players, roundState, null);
+
+        // Equal real bets ($500 each), but a's counts as 50000*1.15=57500
+        // for the split only - the real bet (bets_json) is never touched.
+        expect(result.potDistributions['a']).toBeGreaterThan(result.potDistributions['b']);
+        expect(result.potDistributions['a']).toBe(53488);
+        expect(result.potDistributions['b']).toBe(46512);
+        expect(players.find(p => p.id === 'a').money_cents).toBe(53488);
+
+        const sum = Object.values(result.potDistributions).reduce((s, v) => s + v, 0);
+        expect(sum).toBe(100000);
+    });
+
+    it('does not apply the FIRST bonus when the highest bettor chose LAST instead', () => {
+        const room = makeRoom({ pot_cents: 100000, starting_player_index: 0 });
+        const players = [
+            makePlayer('a', { money_cents: 0 }),
+            makePlayer('b', { money_cents: 0 })
+        ];
+        const roundState = makeRoundState({
+            bets_json: { a: 50000, b: 50000 },
+            highest_bettor_id: 'a',
+            position_choice: 'last'
+        });
+
+        const result = game.endRound(room, players, roundState, null);
+
+        // Equal real bets, no FIRST bonus in play - even split.
+        expect(result.potDistributions['a']).toBe(50000);
+        expect(result.potDistributions['b']).toBe(50000);
+    });
+
     it('syncs the eliminated player to spectator immediately, not just at the next round start', () => {
         const room = makeRoom({ pot_cents: 100000, starting_player_index: 0 });
         // a went all-in and busts - money_cents is already 0 from that bet
@@ -428,6 +472,21 @@ describe('game.transitionToPlaying + game.applyPositionChoice', () => {
         const applied = game.applyPositionChoice(room, players, roundState, 'first');
         expect(applied.firstPlayer.id).toBe('b');
         expect(room.turn_player_id).toBe('b');
+        expect(roundState.position_choice).toBe('first');
+    });
+
+    it('records position_choice as "first" even when the highest bettor was already sitting first (no reorder needed) - endRound needs the actual choice, not just whether anyone moved', () => {
+        const room = makeRoom({ starting_player_index: 0 });
+        const players = [
+            makePlayer('a', { seat_index: 0 }),
+            makePlayer('b', { seat_index: 1 })
+        ];
+        // a is highest bettor and already first in turn order.
+        const roundState = makeRoundState({ bets_json: { a: 30000, b: 10000 }, log_json: [] });
+
+        game.transitionToPlaying(room, players, roundState);
+        game.applyPositionChoice(room, players, roundState, 'first');
+        expect(roundState.position_choice).toBe('first');
     });
 
     it('lets the highest bettor move to last position', () => {

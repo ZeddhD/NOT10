@@ -17,7 +17,13 @@ export const GAME_CONSTANTS = {
     CARDS_PER_PLAYER_4: 4,
     CARDS_PER_PLAYER_2: 6,
     BUST_THRESHOLD: 10,
-    RAISE_AMOUNTS: [10000, 20000, 50000] // $100, $200, $500 in cents
+    RAISE_AMOUNTS: [10000, 20000, 50000], // $100, $200, $500 in cents
+    // GO LAST gives real information (the running total before every one
+    // of your turns, all round); GO FIRST gave nothing but "pressure" with
+    // no mechanical teeth, making it close to strictly worse. This pays
+    // FIRST off in the one currency the game already cares about - your
+    // pot share, if you survive - instead of adding a new mechanic.
+    FIRST_POSITION_BONUS: 1.15
 };
 
 /**
@@ -91,6 +97,10 @@ export function startNewRound(room, players) {
         highest_bettor_id: null,
         highest_bet: 0,
         awaiting_position_choice: false,
+        // 'first' | 'last' | null - set by applyPositionChoice once the
+        // highest bettor actually decides. endRound reads this to apply
+        // the FIRST payout bonus.
+        position_choice: null,
         played_count: 0,
         log_json: [{
             type: 'round_start',
@@ -474,6 +484,11 @@ export function applyPositionChoice(room, activePlayers, roundState, choice) {
     const firstPlayer = orderedPlayers[0];
     roundState.awaiting_position_choice = false;
     roundState.play_order = orderedPlayers.map(p => p.id);
+    // Recorded even when the highest bettor was already sitting in the
+    // position they chose (the "stays in current position" branch above) -
+    // endRound needs to know what was actually chosen, not just whether
+    // anyone physically moved, to apply the FIRST payout bonus correctly.
+    roundState.position_choice = choice;
     room.turn_player_id = firstPlayer.id;
 
     return { success: true, firstPlayer };
@@ -554,13 +569,26 @@ export function endRound(room, players, roundState, eliminatedPlayerId) {
     const survivors = activePlayers.filter(p => p.id !== eliminatedPlayerId);
     const bets = roundState.bets_json || {};
 
-    const totalSurvivorBets = survivors.reduce((sum, s) => sum + (bets[s.id] || 0), 0);
+    // The highest bettor who chose to GO FIRST gets their bet weighted up
+    // for pot-share purposes only - real money at risk (bets_json) is
+    // untouched, this only affects how big a slice of the pot they get if
+    // they're still standing to collect it. Offsets GO LAST's built-in
+    // information edge (the running total, every turn, all round) with a
+    // real risk/reward trade instead of FIRST being the strictly worse
+    // pick it used to be.
+    const firstBonusPlayerId = roundState.position_choice === 'first' ? roundState.highest_bettor_id : null;
+    const weightedBet = (playerId) => {
+        const bet = bets[playerId] || 0;
+        return playerId === firstBonusPlayerId ? Math.round(bet * GAME_CONSTANTS.FIRST_POSITION_BONUS) : bet;
+    };
+
+    const totalSurvivorBets = survivors.reduce((sum, s) => sum + weightedBet(s.id), 0);
     const potDistributions = {};
     let totalDistributed = 0;
 
     for (let i = 0; i < survivors.length; i++) {
         const survivor = survivors[i];
-        const survivorBet = bets[survivor.id] || 0;
+        const survivorBet = weightedBet(survivor.id);
 
         let share;
         if (totalSurvivorBets === 0) {
@@ -577,9 +605,10 @@ export function endRound(room, players, roundState, eliminatedPlayerId) {
         totalDistributed += share;
     }
 
-    const distributionDetails = survivors.map(s =>
-        `${s.name}: bet ${utils.formatMoney(bets[s.id] || 0)} → won ${utils.formatMoney(potDistributions[s.id])}`
-    ).join(', ');
+    const distributionDetails = survivors.map(s => {
+        const bonusNote = s.id === firstBonusPlayerId ? ' (+FIRST bonus)' : '';
+        return `${s.name}: bet ${utils.formatMoney(bets[s.id] || 0)}${bonusNote} → won ${utils.formatMoney(potDistributions[s.id])}`;
+    }).join(', ');
 
     roundState.log_json.push({
         type: 'round_end',

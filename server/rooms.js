@@ -55,6 +55,7 @@ class Room {
         this.players = [];
         this.roundState = null;
         this.hands = new Map(); // playerId -> number[] (server-only, never fully broadcast)
+        this.deck = []; // remaining undealt cards this round - see dealRemainingHands
         this.sessionTokens = new Map(); // playerId -> secret rejoin token (server-only, never broadcast to anyone but the owner)
         this.sockets = new Map(); // playerId -> ws
         this.disconnectTimers = new Map(); // playerId -> Timeout
@@ -369,6 +370,9 @@ export class RoomManager {
 
         room.roundState = result.roundState;
         room.hands = new Map(Object.entries(result.hands));
+        // Remaining, undealt cards - held here until the position choice
+        // resolves and dealRemainingHands tops everyone's hand up.
+        room.deck = result.deck;
         room.touch();
         this._broadcast(room);
     }
@@ -399,12 +403,18 @@ export class RoomManager {
 
         if (game.isBettingComplete(activePlayers, room.roundState.finalized_json)) {
             game.transitionToPlaying(room.room, activePlayers, room.roundState);
-            // Cards are dealt once at round start, so on the rare hand this
-            // small this can already be true the instant betting ends - no
-            // one would ever get to play a card, so _handsExhausted() after
-            // a play (see _handlePlayCard/_autoPlayCard) would never run.
-            if (!room.roundState.awaiting_position_choice && this._handsExhausted(room)) {
-                return this._endRound(room, null);
+            if (!room.roundState.awaiting_position_choice) {
+                // No highest bettor needed to choose a position - deal the
+                // rest of every hand right now, the same moment it would
+                // happen after a real choice resolves (see
+                // _handleChoosePosition/_maybeAutoChoosePosition).
+                game.dealRemainingHands(activePlayers, room.hands, room.deck, room.roundState.cards_per_player);
+                // On the rare hand this small, that top-up can immediately
+                // exhaust every hand before anyone gets to play a card, so
+                // _handsExhausted() after a play would never run.
+                if (this._handsExhausted(room)) {
+                    return this._endRound(room, null);
+                }
             }
         } else {
             const actingPlayer = room.players.find(p => p.id === actingPlayerId);
@@ -427,6 +437,9 @@ export class RoomManager {
 
         const activePlayers = room.players.filter(p => p.status === 'active');
         game.applyPositionChoice(room.room, activePlayers, room.roundState, choice === 'first' ? 'first' : 'last');
+        // Only now - choice made, not before - does everyone's hand get
+        // topped up to full size.
+        game.dealRemainingHands(activePlayers, room.hands, room.deck, room.roundState.cards_per_player);
         room.touch();
         if (this._handsExhausted(room)) return this._endRound(room, null);
         this._broadcast(room);
@@ -508,6 +521,7 @@ export class RoomManager {
             is_ready: false
         }));
         room.hands = new Map();
+        room.deck = [];
         room.roundState = null;
         room.room.status = 'lobby';
         room.room.phase = 'lobby';
@@ -652,6 +666,9 @@ export class RoomManager {
             const choice = ai.choosePosition(aiInstance);
             const activePlayers = room.players.filter(p => p.status === 'active');
             game.applyPositionChoice(room.room, activePlayers, room.roundState, choice);
+            // Only now - choice made, not before - does everyone's hand get
+            // topped up to full size.
+            game.dealRemainingHands(activePlayers, room.hands, room.deck, room.roundState.cards_per_player);
             room.touch();
             if (this._handsExhausted(room)) {
                 this._endRound(room, null);

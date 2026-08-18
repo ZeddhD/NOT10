@@ -194,8 +194,18 @@ describe('leaving mid-game does not freeze the room for everyone else', () => {
             if (d.roundState) roundsSeen.add(d.roundState.round_no);
             if (d.room?.status === 'finished') finished = true;
             if (d.room?.turn_player_id === 'lb') {
-                if (d.room.phase === 'betting') b.send({ type: 'bet', action: 'call', amount: null });
-                else if (d.room.phase === 'playing' && d.yourHand?.length) {
+                if (d.room.phase === 'betting') {
+                    // There's no free check - if nobody's bet yet this
+                    // round, 'call' is rejected (no new state follows,
+                    // which would otherwise hang this loop forever). Bet
+                    // for real when B is first to act, call otherwise.
+                    const tableHighest = Math.max(0, ...Object.values(d.roundState?.bets_json || {}));
+                    if (tableHighest === 0) {
+                        b.send({ type: 'bet', action: 'bet', amount: 10000 });
+                    } else {
+                        b.send({ type: 'bet', action: 'call', amount: null });
+                    }
+                } else if (d.room.phase === 'playing' && d.yourHand?.length) {
                     b.send({ type: 'play_card', value: Math.min(...d.yourHand) });
                 }
             }
@@ -260,10 +270,15 @@ describe('hands exhausted without a bust ends the round as a push, not a freeze'
         const room = roomManager.rooms.get(roomCode);
 
         // Force every active player's hand empty right now, then finalize
-        // betting so play begins with nothing left to play.
+        // betting so play begins with nothing left to play. Also empty the
+        // deck - otherwise dealRemainingHands (which tops every hand back
+        // up to full size once the position choice below resolves, as it
+        // does on every real round) would just refill what we just forced
+        // empty from the still-full deck.
         for (const p of room.players.filter(p => p.status === 'active')) {
             room.hands.set(p.id, []);
         }
+        room.deck = [];
 
         c.drain();
         c.send({ type: 'bet', action: 'all-in', amount: null }); // also auto-finalizes - guaranteed highest bettor

@@ -55,18 +55,27 @@ export function startNewRound(room, players) {
     const cardsPerPlayer = activePlayers.length >= 3
         ? GAME_CONSTANTS.CARDS_PER_PLAYER_4
         : GAME_CONSTANTS.CARDS_PER_PLAYER_2;
+    // Only half the hand is dealt before betting - the rest comes after the
+    // highest bettor's FIRST/LAST choice resolves (see dealRemainingHands),
+    // so both the bet and the position choice are made on a real signal,
+    // not a fully-known hand. A fixed fraction (not a fixed count) so a
+    // 6-card 2-player hand reveals the same *proportion* as a 4-card one.
+    const halfCount = Math.ceil(cardsPerPlayer / 2);
 
     let deck = utils.createDeck();
     deck = utils.shuffleArray(deck);
 
     const hands = {};
     for (const player of activePlayers) {
-        hands[player.id] = utils.dealCards(deck, cardsPerPlayer);
+        hands[player.id] = utils.dealCards(deck, halfCount);
     }
 
     const roundState = {
         round_no: newRoundNo,
         eliminated_player_id: null,
+        // Full intended hand size - dealRemainingHands tops each player's
+        // hand up to this once the position choice is resolved.
+        cards_per_player: cardsPerPlayer,
         bets_json: {},
         has_raised_json: {},
         bet_action_count_json: {},
@@ -102,10 +111,36 @@ export function startNewRound(room, players) {
         gameOver: false,
         round: newRoundNo,
         hands,
+        // Remaining, undealt cards - the caller must hold onto this (it's
+        // not stored on room/roundState) and pass it back into
+        // dealRemainingHands once the position choice resolves.
+        deck,
         roundState,
         startingPlayer: currentTurnPlayer,
         activePlayers
     };
+}
+
+/**
+ * Top every active player's hand up to the round's full intended size -
+ * called once the highest bettor's FIRST/LAST choice is resolved (or
+ * immediately if no choice was needed), never before. Mutates handsMap in
+ * place (matches how the rest of this module mutates room/player state).
+ * @param {Array} activePlayers
+ * @param {Map<string, number[]>} handsMap - playerId -> current (partial) hand
+ * @param {number[]} deck - remaining undealt cards, mutated via splice
+ * @param {number} cardsPerPlayer - the round's full intended hand size
+ * @returns {Map<string, number[]>} handsMap, for convenience
+ */
+export function dealRemainingHands(activePlayers, handsMap, deck, cardsPerPlayer) {
+    for (const player of activePlayers) {
+        const current = handsMap.get(player.id) || [];
+        const needed = cardsPerPlayer - current.length;
+        if (needed > 0) {
+            handsMap.set(player.id, [...current, ...utils.dealCards(deck, needed)]);
+        }
+    }
+    return handsMap;
 }
 
 /**

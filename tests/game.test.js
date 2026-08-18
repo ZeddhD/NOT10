@@ -89,19 +89,23 @@ describe('game.startNewRound', () => {
         ];
     });
 
-    it('deals 4 cards per player when 3+ are active', () => {
+    it('deals only half of the eventual 4-card hand before betting', () => {
         const result = game.startNewRound(room, players);
         expect(result.gameOver).toBe(false);
-        expect(result.hands['p1']).toHaveLength(4);
-        expect(result.hands['p2']).toHaveLength(4);
-        expect(result.hands['p3']).toHaveLength(4);
+        expect(result.roundState.cards_per_player).toBe(4);
+        expect(result.hands['p1']).toHaveLength(2);
+        expect(result.hands['p2']).toHaveLength(2);
+        expect(result.hands['p3']).toHaveLength(2);
+        // 6 cards dealt (3 players x 2) out of 40.
+        expect(result.deck).toHaveLength(34);
     });
 
-    it('deals 6 cards per player when only 2 are active', () => {
+    it('deals only half of the eventual 6-card hand before betting when only 2 are active', () => {
         players = [makePlayer('p1', { seat_index: 0 }), makePlayer('p2', { seat_index: 1 })];
         const result = game.startNewRound(room, players);
-        expect(result.hands['p1']).toHaveLength(6);
-        expect(result.hands['p2']).toHaveLength(6);
+        expect(result.roundState.cards_per_player).toBe(6);
+        expect(result.hands['p1']).toHaveLength(3);
+        expect(result.hands['p2']).toHaveLength(3);
     });
 
     it('reports gameOver when fewer than 2 players have money', () => {
@@ -141,6 +145,35 @@ describe('game.startNewRound', () => {
         expect(room.turn_player_id).toBe(result.startingPlayer.id);
         expect(result.roundState.round_no).toBe(1);
         expect(result.roundState.log_json).toHaveLength(1);
+    });
+});
+
+describe('game.dealRemainingHands', () => {
+    it('tops each player up to the full hand size using the leftover deck', () => {
+        const room = makeRoom();
+        const players = [
+            makePlayer('p1', { seat_index: 0 }),
+            makePlayer('p2', { seat_index: 1 }),
+            makePlayer('p3', { seat_index: 2 })
+        ];
+        const result = game.startNewRound(room, players);
+        const handsMap = new Map(Object.entries(result.hands));
+
+        game.dealRemainingHands(result.activePlayers, handsMap, result.deck, result.roundState.cards_per_player);
+
+        expect(handsMap.get('p1')).toHaveLength(4);
+        expect(handsMap.get('p2')).toHaveLength(4);
+        expect(handsMap.get('p3')).toHaveLength(4);
+        // All 12 cards (3 players x 4) came out of the same 40-card deck.
+        expect(result.deck).toHaveLength(40 - 12);
+    });
+
+    it('is a no-op for a player already dealt up to the full hand size', () => {
+        const handsMap = new Map([['p1', [0, 1, 2, 3]]]);
+        const deck = [0, 1, 2, 3, 0, 1];
+        game.dealRemainingHands([makePlayer('p1')], handsMap, deck, 4);
+        expect(handsMap.get('p1')).toHaveLength(4);
+        expect(deck).toHaveLength(6); // untouched
     });
 });
 

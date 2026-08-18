@@ -702,6 +702,18 @@ h1, h2, h3, h4, h5, h6 {
     margin: 0 auto;
 }
 
+/* Back to Menu had no width rule of its own, so it sat at its natural
+   text width next to Join Room's full-width .btn-large - a lopsided gap
+   on one side instead of both buttons lining up with the inputs above
+   them. Match widths and give them a real, deliberate gap. */
+.join-form .btn {
+    width: 100%;
+}
+
+.join-form .btn + .btn {
+    margin-top: var(--spacing-md);
+}
+
 .form-group {
     margin-bottom: var(--spacing-lg);
 }
@@ -2091,6 +2103,13 @@ h1, h2, h3, h4, h5, h6 {
     flex-direction: column;
     gap: var(--spacing-md);
     align-items: center;
+}
+
+/* Same fix as .join-form: Back to Menu had no width of its own, sitting
+   lopsided next to Play Again's full-width .btn-large. */
+.gameover-actions .btn {
+    width: 100%;
+    max-width: 400px;
 }
 
 /* === Modal === */

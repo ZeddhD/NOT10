@@ -777,10 +777,11 @@ h1, h2, h3, h4, h5, h6 {
 /* The pot's own banner, sitting right above the table (see .game-table's
    top margin, which reserves room for it) - not tucked into the header
    alongside a round counter and a leave button, both far less important
-   than "how much is actually at stake right now". */
+   than "how much is actually at stake right now". Offset grew from
+   -6.75rem to make room for .table-brand-mark, its first child below. */
 .table-banner {
     position: absolute;
-    top: -6.75rem;
+    top: -9.25rem;
     left: 50%;
     transform: translateX(-50%);
     z-index: 12;
@@ -788,6 +789,28 @@ h1, h2, h3, h4, h5, h6 {
     flex-direction: column;
     align-items: center;
     gap: var(--spacing-sm);
+}
+
+/* A small version of the card-fan mark used elsewhere (menu, favicon) -
+   fills the reserved space above the pot with an intentional brand touch
+   instead of leaving it blank. Sits as the first child of .table-banner so
+   it stacks above POT via the banner's own flex column, same idea as
+   .menu-card-fan just smaller and reusing the same fan-card-1/2/3 tilt. */
+.table-brand-mark {
+    display: flex;
+    justify-content: center;
+    align-items: flex-end;
+    pointer-events: none;
+}
+
+.table-brand-mark .card {
+    width: 26px;
+    height: 36px;
+    font-size: 0.75rem;
+    margin: 0 -7px;
+    cursor: default;
+    pointer-events: none;
+    box-shadow: var(--shadow-sm);
 }
 
 .pot-display {
@@ -847,10 +870,11 @@ h1, h2, h3, h4, h5, h6 {
     width: min(100%, calc(100vh - 200px));
     max-width: 860px;
     aspect-ratio: 1 / 1;
-    /* Top margin reserves room for .table-banner (pot + phase indicator),
-       which sits just above the table rather than the pot living in the
-       header and the phase indicator crowding the top player's panel. */
-    margin: 6.75rem auto 0;
+    /* Top margin reserves room for .table-banner (pot + phase indicator,
+       plus .table-brand-mark above it), which sits just above the table
+       rather than the pot living in the header and the phase indicator
+       crowding the top player's panel. */
+    margin: 9.25rem auto 0;
     padding: 0;
     min-height: 0;
     min-width: 0;
@@ -2352,10 +2376,10 @@ h1, h2, h3, h4, h5, h6 {
         height: auto;
         width: min(94vw, 520px);
         max-width: none;
-        /* Extra margin beyond the base -6.75rem table-banner offset so the
-           pot clears the round/leave/sound row with a visible gap, instead
-           of sitting flush against it. */
-        margin: 11rem auto var(--spacing-md);
+        /* Extra margin beyond the base -9.25rem table-banner offset so the
+           pot (and the brand mark above it) clears the round/leave/sound
+           row with a visible gap, instead of sitting flush against it. */
+        margin: 13.5rem auto var(--spacing-md);
     }
 
     /* The one real overlap left inside the table itself: the BUSTED
@@ -2483,7 +2507,7 @@ h1, h2, h3, h4, h5, h6 {
 
     .game-table {
         width: min(96vw, 380px);
-        margin: 11rem auto var(--spacing-md);
+        margin: 13.5rem auto var(--spacing-md);
     }
 
     .player-controls {

@@ -413,7 +413,7 @@ function handleStateUpdate(data) {
         const newEntries = (data.roundState?.log_json || []).slice(isNewRound ? 0 : previousLogLength);
         for (const entry of newEntries) {
             const isDanger = entry.type === 'play_card' && entry.newTotal >= game.GAME_CONSTANTS.BUST_THRESHOLD;
-            const isHighlight = entry.type === 'round_start' || entry.type === 'round_end' || entry.type === 'play_order' || entry.type === 'tie_break';
+            const isHighlight = entry.type === 'round_start' || entry.type === 'round_end' || entry.type === 'play_order' || entry.type === 'tie_break' || entry.type === 'underdog_bonus';
             ui.addLogEntry(entry.message, isDanger ? 'danger' : (isHighlight ? 'highlight' : 'normal'));
 
             if (entry.type === 'play_card') {

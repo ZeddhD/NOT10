@@ -801,6 +801,7 @@ h1, h2, h3, h4, h5, h6 {
     justify-content: center;
     align-items: flex-end;
     pointer-events: none;
+    margin-bottom: var(--spacing-xs);
 }
 
 .table-brand-mark .card {

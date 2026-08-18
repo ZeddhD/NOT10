@@ -23,7 +23,16 @@ export const GAME_CONSTANTS = {
     // no mechanical teeth, making it close to strictly worse. This pays
     // FIRST off in the one currency the game already cares about - your
     // pot share, if you survive - instead of adding a new mechanic.
-    FIRST_POSITION_BONUS: 1.15
+    FIRST_POSITION_BONUS: 1.15,
+    // 2-player-only comeback dial (see computeUnderdogFactor): at 2 players
+    // the leader can always out-bid the one remaining opponent and win the
+    // highest-bettor power every round, with no dilution across other
+    // players the way there is at 3-4. These two boosts scale continuously
+    // with how far behind the trailing player is (0 when stacks are close,
+    // up to the max below at a near-total blowout) - drama, not fairness,
+    // by explicit user choice; deliberately not applied at 3-4 players.
+    UNDERDOG_POSITION_BOOST_MAX: 1.0, // up to +100% effective bet weight when choosing FIRST/LAST
+    UNDERDOG_POT_SHARE_BOOST_MAX: 0.5 // up to +50% weighted bet for pot-share purposes
 };
 
 /**
@@ -361,6 +370,29 @@ export function isBettingComplete(activePlayers, finalized) {
 }
 
 /**
+ * At exactly 2 active players, how far behind the trailing player is, as a
+ * continuous 0-1 dial (0 = stacks are equal, 1 = leader has ~everything).
+ * Powers the 2-player underdog comeback bonus - deliberately continuous,
+ * not a threshold, so there's no cliff-edge the leader can hover just
+ * above to deny it and no jarring moment where the rules visibly flip.
+ * Returns null outside the exact 2-player case (the bonus is intentionally
+ * not applied at 3-4 players - see GAME_CONSTANTS comment).
+ * @param {Array} activePlayers - must be the active players for this check
+ * @returns {{leaderId: string, underdogId: string, factor: number}|null}
+ */
+export function computeUnderdogFactor(activePlayers) {
+    if (activePlayers.length !== 2) return null;
+    const [p1, p2] = activePlayers;
+    if (p1.money_cents === p2.money_cents) {
+        return { leaderId: p1.id, underdogId: p2.id, factor: 0 };
+    }
+    const [leader, underdog] = p1.money_cents > p2.money_cents ? [p1, p2] : [p2, p1];
+    if (leader.money_cents <= 0) return null;
+    const factor = Math.max(0, Math.min(1, (leader.money_cents - underdog.money_cents) / leader.money_cents));
+    return { leaderId: leader.id, underdogId: underdog.id, factor };
+}
+
+/**
  * Transition from betting to playing phase
  * @param {Object} room - Room object
  * @param {Array} activePlayers - Active players
@@ -372,7 +404,20 @@ export function transitionToPlaying(room, activePlayers, roundState) {
     const betSequence = roundState.bet_sequence_json || {};
     const orderedPlayers = utils.getPlayersInTurnOrder(activePlayers, room.starting_player_index);
 
-    let highestBet = 0;
+    // 2-player underdog comeback dial (see computeUnderdogFactor/
+    // GAME_CONSTANTS) - the trailing player's bet counts extra when
+    // deciding who gets the highest-bettor power. null outside the exact
+    // 2-player case, so this has zero effect at 3-4 players.
+    const underdogInfo = computeUnderdogFactor(activePlayers);
+    const effectiveBet = (playerId, realBet) => {
+        if (underdogInfo && playerId === underdogInfo.underdogId) {
+            return realBet * (1 + underdogInfo.factor * GAME_CONSTANTS.UNDERDOG_POSITION_BOOST_MAX);
+        }
+        return realBet;
+    };
+
+    let highestBet = 0; // the winner's REAL bet - used for display/logging, never the boosted one
+    let highestEffectiveBet = 0;
     let highestBettorId = null;
     let highestBettorSeq = Infinity;
 
@@ -385,9 +430,11 @@ export function transitionToPlaying(room, activePlayers, roundState) {
     for (const player of orderedPlayers) {
         const playerBet = bets[player.id] || 0;
         if (playerBet <= 0) continue;
+        const effBet = effectiveBet(player.id, playerBet);
         const seq = betSequence[player.id] ?? Infinity;
-        if (playerBet > highestBet || (playerBet === highestBet && seq < highestBettorSeq)) {
+        if (effBet > highestEffectiveBet || (effBet === highestEffectiveBet && seq < highestBettorSeq)) {
             highestBet = playerBet;
+            highestEffectiveBet = effBet;
             highestBettorId = player.id;
             highestBettorSeq = seq;
         }
@@ -406,6 +453,19 @@ export function transitionToPlaying(room, activePlayers, roundState) {
                 message: `${highestBettor.name} tied with ${others} at ${utils.formatMoney(highestBet)} - ${highestBettor.name} gets the choice for reaching it first`,
                 timestamp: utils.getTimestamp()
             });
+        } else if (underdogInfo && highestBettorId === underdogInfo.underdogId && underdogInfo.factor > 0) {
+            // The boost is what actually won it, not just a bigger bet -
+            // worth calling out so it doesn't look arbitrary.
+            const leaderRealBet = bets[underdogInfo.leaderId] || 0;
+            if (highestBet < leaderRealBet) {
+                roundState.log_json.push({
+                    type: 'underdog_bonus',
+                    playerId: highestBettorId,
+                    playerName: highestBettor.name,
+                    message: `${highestBettor.name} is trailing badly, so their bet counted extra - they get the choice despite betting less`,
+                    timestamp: utils.getTimestamp()
+                });
+            }
         }
 
         roundState.highest_bettor_id = highestBettorId;
@@ -577,9 +637,22 @@ export function endRound(room, players, roundState, eliminatedPlayerId) {
     // real risk/reward trade instead of FIRST being the strictly worse
     // pick it used to be.
     const firstBonusPlayerId = roundState.position_choice === 'first' ? roundState.highest_bettor_id : null;
+    // 2-player underdog comeback dial - stacks on top of the FIRST bonus
+    // above rather than replacing it (a survivor can get both at once).
+    // null outside the exact 2-player case, so this has zero effect at
+    // 3-4 players. Computed from activePlayers (both players as they
+    // entered this round's resolution), not survivors - a 1-survivor push
+    // makes this a no-op anyway (100% of the pot either way).
+    const underdogInfo = computeUnderdogFactor(activePlayers);
     const weightedBet = (playerId) => {
-        const bet = bets[playerId] || 0;
-        return playerId === firstBonusPlayerId ? Math.round(bet * GAME_CONSTANTS.FIRST_POSITION_BONUS) : bet;
+        let bet = bets[playerId] || 0;
+        if (playerId === firstBonusPlayerId) {
+            bet = Math.round(bet * GAME_CONSTANTS.FIRST_POSITION_BONUS);
+        }
+        if (underdogInfo && playerId === underdogInfo.underdogId) {
+            bet = Math.round(bet * (1 + underdogInfo.factor * GAME_CONSTANTS.UNDERDOG_POT_SHARE_BOOST_MAX));
+        }
+        return bet;
     };
 
     const totalSurvivorBets = survivors.reduce((sum, s) => sum + weightedBet(s.id), 0);
@@ -606,7 +679,10 @@ export function endRound(room, players, roundState, eliminatedPlayerId) {
     }
 
     const distributionDetails = survivors.map(s => {
-        const bonusNote = s.id === firstBonusPlayerId ? ' (+FIRST bonus)' : '';
+        const notes = [];
+        if (s.id === firstBonusPlayerId) notes.push('+FIRST bonus');
+        if (underdogInfo && s.id === underdogInfo.underdogId && underdogInfo.factor > 0) notes.push('+underdog bonus');
+        const bonusNote = notes.length ? ` (${notes.join(', ')})` : '';
         return `${s.name}: bet ${utils.formatMoney(bets[s.id] || 0)}${bonusNote} → won ${utils.formatMoney(potDistributions[s.id])}`;
     }).join(', ');
 

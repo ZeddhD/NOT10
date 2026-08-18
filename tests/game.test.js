@@ -426,6 +426,43 @@ describe('game.endRound - weighted pot distribution', () => {
         expect(result.potDistributions['b']).toBe(50000);
     });
 
+    it('gives the 2-player underdog a bigger pot share via weighted bet, even with an equal real bet', () => {
+        const room = makeRoom({ pot_cents: 100000, starting_player_index: 0 });
+        // Post-bet remaining money: a is well ahead (leader), b is way
+        // behind (underdog, factor = 600000/700000 = 6/7 ≈ 0.857).
+        const players = [
+            makePlayer('a', { money_cents: 700000 }),
+            makePlayer('b', { money_cents: 100000 })
+        ];
+        const roundState = makeRoundState({ bets_json: { a: 50000, b: 50000 } });
+
+        const result = game.endRound(room, players, roundState, null);
+
+        // Equal real bets, but b (the underdog) gets the bigger share.
+        expect(result.potDistributions['b']).toBeGreaterThan(result.potDistributions['a']);
+        expect(result.potDistributions['a']).toBe(41176);
+        expect(result.potDistributions['b']).toBe(58824);
+
+        const sum = Object.values(result.potDistributions).reduce((s, v) => s + v, 0);
+        expect(sum).toBe(100000);
+    });
+
+    it('applies no underdog bonus at 3+ players even with the same money gap', () => {
+        const room = makeRoom({ pot_cents: 100000, starting_player_index: 0 });
+        const players = [
+            makePlayer('a', { money_cents: 700000 }),
+            makePlayer('b', { money_cents: 100000 }),
+            makePlayer('c', { money_cents: 100000 })
+        ];
+        const roundState = makeRoundState({ bets_json: { a: 50000, b: 50000, c: 0 } });
+
+        const result = game.endRound(room, players, roundState, 'c');
+
+        // Equal real bets between the two survivors, no boost at 3 players - even split.
+        expect(result.potDistributions['a']).toBe(50000);
+        expect(result.potDistributions['b']).toBe(50000);
+    });
+
     it('syncs the eliminated player to spectator immediately, not just at the next round start', () => {
         const room = makeRoom({ pot_cents: 100000, starting_player_index: 0 });
         // a went all-in and busts - money_cents is already 0 from that bet
@@ -601,6 +638,69 @@ describe('game.transitionToPlaying + game.applyPositionChoice', () => {
         const transition = game.transitionToPlaying(room, players, roundState);
         expect(transition.highestBettorId).toBe('a');
         expect(transition.highestBet).toBe(30000);
+    });
+});
+
+describe('game.computeUnderdogFactor', () => {
+    it('returns null outside the exact 2-player case', () => {
+        expect(game.computeUnderdogFactor([makePlayer('a'), makePlayer('b'), makePlayer('c')])).toBeNull();
+        expect(game.computeUnderdogFactor([makePlayer('a')])).toBeNull();
+    });
+
+    it('returns factor 0 when stacks are equal', () => {
+        const result = game.computeUnderdogFactor([
+            makePlayer('a', { money_cents: 500000 }),
+            makePlayer('b', { money_cents: 500000 })
+        ]);
+        expect(result.factor).toBe(0);
+    });
+
+    it('scales continuously with the money gap, not a hard cutoff', () => {
+        const result = game.computeUnderdogFactor([
+            makePlayer('a', { money_cents: 800000 }),
+            makePlayer('b', { money_cents: 200000 })
+        ]);
+        expect(result.leaderId).toBe('a');
+        expect(result.underdogId).toBe('b');
+        expect(result.factor).toBeCloseTo(0.75, 5);
+    });
+});
+
+describe('2-player underdog bonus (fix 3)', () => {
+    it('lets the trailing player win the highest-bettor power despite betting less, and logs why', () => {
+        const room = makeRoom({ starting_player_index: 0 });
+        const players = [
+            makePlayer('a', { seat_index: 0, money_cents: 800000 }), // leader
+            makePlayer('b', { seat_index: 1, money_cents: 200000 })  // underdog, factor 0.75
+        ];
+        // a's real bet (50000) is higher than b's (30000) - without the
+        // bonus a would win. b's effective bet is 30000*(1+0.75)=52500.
+        const roundState = makeRoundState({ bets_json: { a: 50000, b: 30000 }, log_json: [] });
+
+        const transition = game.transitionToPlaying(room, players, roundState);
+
+        expect(transition.highestBettorId).toBe('b');
+        expect(transition.highestBet).toBe(30000); // real bet, never the boosted effective one
+        expect(roundState.highest_bet).toBe(30000);
+
+        const bonusEntry = roundState.log_json.find(e => e.type === 'underdog_bonus');
+        expect(bonusEntry).toBeTruthy();
+        expect(bonusEntry.playerId).toBe('b');
+    });
+
+    it('has no effect on the highest-bettor choice at 3+ players, even with the same money gap', () => {
+        const room = makeRoom({ starting_player_index: 0 });
+        const players = [
+            makePlayer('a', { seat_index: 0, money_cents: 800000 }),
+            makePlayer('b', { seat_index: 1, money_cents: 200000 }),
+            makePlayer('c', { seat_index: 2, money_cents: 200000 })
+        ];
+        const roundState = makeRoundState({ bets_json: { a: 50000, b: 30000, c: 10000 }, log_json: [] });
+
+        const transition = game.transitionToPlaying(room, players, roundState);
+
+        expect(transition.highestBettorId).toBe('a'); // real highest bet wins, no boost applied
+        expect(roundState.log_json.find(e => e.type === 'underdog_bonus')).toBeUndefined();
     });
 });
 

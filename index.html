@@ -23,7 +23,7 @@
         <!-- Loading Screen -->
         <div id="loading-screen" class="screen">
             <div class="loading-content">
-                <h1 class="game-title glow">NOT10</h1>
+                <h1 class="game-title">NOT10</h1>
                 <div class="game-logo-pips" aria-hidden="true">
                     <span class="pip pip-0"></span>
                     <span class="pip pip-1"></span>
@@ -38,7 +38,12 @@
         <!-- Main Menu Screen -->
         <div id="menu-screen" class="screen hidden">
             <div class="menu-content">
-                <h1 class="game-title glow">NOT10</h1>
+                <div class="menu-card-fan" aria-hidden="true">
+                    <div class="card card-2 fan-card fan-card-1" data-value="2">2</div>
+                    <div class="card card-0 fan-card fan-card-2" data-value="0">0</div>
+                    <div class="card card-3 fan-card fan-card-3" data-value="3">3</div>
+                </div>
+                <h1 class="game-title">NOT10</h1>
                 <div class="game-logo-pips" aria-hidden="true">
                     <span class="pip pip-0"></span>
                     <span class="pip pip-1"></span>
@@ -58,7 +63,7 @@
                         <span class="btn-icon icon-cards" aria-hidden="true"></span>
                         Create Lobby
                     </button>
-                    <button id="join-lobby-btn" class="btn btn-primary btn-large">
+                    <button id="join-lobby-btn" class="btn btn-secondary btn-large">
                         <span class="btn-icon icon-door" aria-hidden="true"></span>
                         Join Lobby
                     </button>
@@ -69,7 +74,7 @@
                 </div>
 
                 <div class="menu-footer">
-                    <button id="help-btn" class="btn-text">How to Play</button>
+                    <button id="help-btn" class="btn btn-secondary btn-small">How to Play</button>
                 </div>
             </div>
         </div>

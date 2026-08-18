@@ -327,7 +327,11 @@ function handleMultiplayerFinalize() {
 }
 
 function handleMultiplayerCardClick(cardValue) {
-    sound.playCard();
+    // Optimistic - the server hasn't confirmed yet, but we already know
+    // the resulting total, so the tension in the sound doesn't have to
+    // wait for the round-trip.
+    const resultingTotal = (appState.room?.table_total || 0) + cardValue;
+    sound.playCard(resultingTotal / game.GAME_CONSTANTS.BUST_THRESHOLD);
     wsClient.send({ type: 'play_card', value: cardValue });
 }
 
@@ -366,6 +370,10 @@ function handleStateUpdate(data) {
     const previousRoundNo = appState.roundState?.round_no;
     const previousLogLength = appState.roundState?.log_json?.length || 0;
     const previousHandLength = appState.myHand?.length || 0;
+    const previousTurnPlayerId = appState.room?.turn_player_id;
+    const previousAwaitingChoiceFor = appState.roundState?.awaiting_position_choice
+        ? appState.roundState?.highest_bettor_id
+        : null;
 
     appState.room = data.room;
     appState.players = data.players;
@@ -380,7 +388,30 @@ function handleStateUpdate(data) {
     // like extra cards appeared for no reason. Guarded to the same round
     // so a genuinely new round's fresh partial deal doesn't false-trigger.
     if (data.room.phase === 'playing' && data.roundState?.round_no === previousRoundNo && appState.myHand.length > previousHandLength) {
-        sound.playCard();
+        sound.playDeal();
+    }
+
+    const myId = appState.currentUser.playerId;
+    const isMe = (id) => id && id === myId;
+
+    // It's newly your turn - the one cue that exists to get your
+    // attention rather than react to something that already happened, so
+    // it only fires on the actual transition, not every broadcast while
+    // it's still your turn. Skipped while a position choice is pending -
+    // turn_player_id is just a placeholder during that window (see
+    // transitionToPlaying), not a real "act now"; that moment gets its
+    // own cue below instead.
+    if (!data.roundState?.awaiting_position_choice
+        && isMe(data.room.turn_player_id)
+        && data.room.turn_player_id !== previousTurnPlayerId) {
+        sound.playYourTurn();
+    }
+
+    // You just became the highest bettor with a FIRST/LAST choice waiting -
+    // previously silent until you actually clicked a choice.
+    const nowAwaitingChoiceFor = data.roundState?.awaiting_position_choice ? data.roundState?.highest_bettor_id : null;
+    if (isMe(nowAwaitingChoiceFor) && nowAwaitingChoiceFor !== previousAwaitingChoiceFor) {
+        sound.playPositionChoiceEarned();
     }
 
     storage.saveRoomCode(data.room.code);
@@ -433,8 +464,12 @@ function handleStateUpdate(data) {
                     sound.playBust();
                 } else if (entry.playerId !== appState.currentUser.playerId) {
                     // Our own plays already got a sound optimistically on click.
-                    sound.playCard();
+                    sound.playCard(entry.newTotal / game.GAME_CONSTANTS.BUST_THRESHOLD);
                 }
+            } else if (entry.type === 'tie_break' || entry.type === 'underdog_bonus') {
+                // Rare, table-wide dramatic moments - previously only
+                // visible as a log line, now with a sting everyone hears.
+                sound.playSpecialMoment();
             }
         }
 

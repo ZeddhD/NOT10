@@ -275,11 +275,20 @@ export async function executeAIBet(ai, gameState, roundState) {
     const callAmount = highestBet - myCurrentBet;
 
     if (decision.action === 'raise') {
-        const newBet = highestBet + decision.amount;
-        if (ai.money_cents < newBet - myCurrentBet) {
-            const minRaise = highestBet + 10000;
-            if (ai.money_cents >= minRaise - myCurrentBet) {
-                decision.amount = 10000;
+        // decision.amount is added to the AI's OWN current bet (matches
+        // processBet's 'bet' action: newPlayerBet = currentPlayerBet +
+        // amount), not a target to reach relative to the table's highest
+        // bet - affordability is just "can I afford this increment," not
+        // "can I afford highestBet + this increment." The old formula
+        // compared against highestBet + decision.amount - myCurrentBet,
+        // which wildly overestimated the cost whenever someone else had
+        // already bet more than the AI had committed (i.e. almost every
+        // first raise of a lap), making bots back off from raises they
+        // could easily afford.
+        if (ai.money_cents < decision.amount) {
+            const minRaise = game.GAME_CONSTANTS.RAISE_AMOUNTS[0];
+            if (ai.money_cents >= minRaise) {
+                decision.amount = minRaise;
             } else {
                 decision.action = 'call';
                 decision.amount = null;
@@ -352,6 +361,13 @@ export const AI_DESCRIPTIONS = {
  * @returns {string} 'first' or 'last'
  */
 export function choosePosition(ai) {
+    // Not reachable in normal play (the partial hand dealt before betting
+    // is always at least 2 cards - see startNewRound's halfCount), but an
+    // empty hand here would otherwise divide by zero (NaN avgCard) and
+    // Math.max/min(...[]) returning -Infinity/Infinity - cheap to guard
+    // against outright rather than trust that invariant forever.
+    if (ai.hand.length === 0) return 'last';
+
     const avgCard = ai.hand.reduce((sum, card) => sum + card, 0) / ai.hand.length;
     const maxCard = Math.max(...ai.hand);
     const minCard = Math.min(...ai.hand);

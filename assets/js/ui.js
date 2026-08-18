@@ -865,10 +865,13 @@ export function setSoundToggleState(muted) {
  * @param {boolean} isHost - Is current player the host
  */
 export function renderLobbyScreen(room, players, currentPlayerId, isHost) {
-    const readyPlayers = players.filter(p => p.is_ready);
-    // Solo play is allowed - missing seats auto-fill with bots on start
-    const canStart = readyPlayers.length >= 1 && isHost;
-    
+    // Every human seated must be ready, not just one of them - solo play
+    // still works (the lone human just has to ready themselves), but with
+    // 2+ humans this now actually waits on everyone, matching what the
+    // server enforces (see server/rooms.js's _startGame).
+    const humans = players.filter(p => !p.is_bot);
+    const canStart = humans.length > 0 && humans.every(p => p.is_ready) && isHost;
+
     // Update start button visibility
     updateButton('host-start-btn', isHost, canStart);
 }

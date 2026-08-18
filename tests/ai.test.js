@@ -4,7 +4,7 @@
  * survivor count layered on hand strength).
  */
 import { describe, it, expect } from 'vitest';
-import { AIPlayer } from '../engine/ai.js';
+import { AIPlayer, executeAIBet, choosePosition } from '../engine/ai.js';
 
 describe('AIPlayer.evaluateBetConfidence', () => {
     const ai = new AIPlayer('p1', 'Bot', 'balanced', 0);
@@ -35,5 +35,38 @@ describe('AIPlayer.evaluateBetConfidence', () => {
     it('stays within 0-1 at the extremes', () => {
         expect(ai.evaluateBetConfidence(1, 1000000, 1, 2)).toBeLessThanOrEqual(1);
         expect(ai.evaluateBetConfidence(0, 0, 1000000, 4)).toBeGreaterThanOrEqual(0);
+    });
+});
+
+describe('executeAIBet raise affordability', () => {
+    it('does not downgrade an affordable small raise just because someone else already bet a lot', async () => {
+        // decision.amount is added to the AI's OWN current bet, not a
+        // target relative to the table's highest bet - a bot with plenty
+        // of money for its own $100 raise used to get wrongly downgraded
+        // to a call whenever another player's bet (here $900) was already
+        // far above what the bot itself had committed ($0 so far).
+        const ai = new AIPlayer('p1', 'Bot', 'cautious', 0); // cautious's first action is always raise $100
+        ai.money_cents = 50000; // $500 - trivially affords a $100 raise
+        ai.hand = [0, 1];
+        const roundState = {
+            bets_json: { p2: 90000 }, // someone else already bet $900
+            has_raised_json: {},
+            bet_action_count_json: {}
+        };
+        const gameState = { tableTotal: 0, potCents: 90000, activePlayerCount: 2 };
+
+        const decision = await executeAIBet(ai, gameState, roundState);
+
+        expect(decision.action).toBe('raise');
+        expect(decision.amount).toBe(10000);
+    });
+});
+
+describe('choosePosition edge cases', () => {
+    it('returns a safe choice instead of NaN/Infinity math on an empty hand', () => {
+        const ai = new AIPlayer('p1', 'Bot', 'balanced', 0);
+        ai.hand = [];
+        expect(() => choosePosition(ai)).not.toThrow();
+        expect(['first', 'last']).toContain(choosePosition(ai));
     });
 });

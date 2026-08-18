@@ -204,6 +204,18 @@ export class RoomManager {
         if (!room) return this._sendError(ws, 'Room not found');
         if (room.room.status !== 'lobby') return this._sendError(ws, 'Game already in progress');
 
+        // Re-sending join_room for a playerId already seated in this lobby
+        // (a double-click before the first response arrived, a retry) -
+        // re-attach the socket instead of pushing a second player object
+        // with a duplicate id, which would corrupt every piece of code
+        // downstream that assumes one player object per id (seat order,
+        // active-player counts, turn order).
+        if (room.players.some(p => p.id === playerId)) {
+            this._attachSocket(room, ws, playerId);
+            this._broadcast(room);
+            return;
+        }
+
         const takenSeats = room.players.map(p => p.seat_index);
         let seatIndex = -1;
         for (let i = 0; i < game.GAME_CONSTANTS.MAX_PLAYERS; i++) {
@@ -328,8 +340,16 @@ export class RoomManager {
         if (!room) return;
         if (room.room.host_id !== player.id) return this._sendError(ws, 'Only the host can start the game');
 
-        const readyHumans = room.players.filter(p => !p.is_bot && p.is_ready);
-        if (readyHumans.length < 1) return this._sendError(ws, 'Need at least 1 ready player to start');
+        // Every human seated must actually be ready, not just "at least
+        // one" - that older check let the host start while someone else
+        // in the lobby was still unready (still reading the rules, still
+        // deciding), sweeping them into the game with no say in it. The
+        // ready toggle is meaningless as a signal if starting doesn't
+        // actually wait on it.
+        const humans = room.players.filter(p => !p.is_bot);
+        if (humans.length === 0 || !humans.every(p => p.is_ready)) {
+            return this._sendError(ws, 'All players must be ready to start');
+        }
 
         // Auto-fill missing seats with bots (target 4 total), personality randomized
         const occupiedSeats = room.players.map(p => p.seat_index);

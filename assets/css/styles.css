@@ -480,6 +480,31 @@ h1, h2, h3, h4, h5, h6 {
     width: 100%;
 }
 
+/* A real hand of cards standing in for a hero image - the one thing that
+   instantly says "this is a card game" instead of "this is a dark-themed
+   menu." Reuses the actual in-game .card component (same borders/colors/
+   corner pips a played card gets), just smaller and non-interactive. */
+.menu-card-fan {
+    display: flex;
+    justify-content: center;
+    align-items: flex-end;
+    height: 80px;
+    margin-bottom: var(--spacing-lg);
+}
+
+.menu-card-fan .card {
+    width: 50px;
+    height: 70px;
+    font-size: 1.6rem;
+    margin: 0 -8px;
+    cursor: default;
+    pointer-events: none;
+}
+
+.fan-card-1 { transform: rotate(-14deg) translateY(8px); }
+.fan-card-2 { transform: rotate(0deg) translateY(-4px); z-index: 2; }
+.fan-card-3 { transform: rotate(14deg) translateY(8px); }
+
 .menu-name-input {
     max-width: 320px;
     margin: 0 auto var(--spacing-xl);
@@ -2395,6 +2420,17 @@ h1, h2, h3, h4, h5, h6 {
 
     .game-title {
         font-size: 2.4rem;
+    }
+
+    .menu-card-fan {
+        height: 62px;
+        margin-bottom: var(--spacing-md);
+    }
+
+    .menu-card-fan .card {
+        width: 40px;
+        height: 56px;
+        font-size: 1.25rem;
     }
 
     .lobby-content,

@@ -264,6 +264,70 @@ describe('rejoin requires the real session token', () => {
     });
 });
 
+describe('re-sending join_room for a seat you already hold', () => {
+    it('re-attaches the socket instead of creating a duplicate player object', async () => {
+        const host = client();
+        await host.ready;
+        host.send({ type: 'create_room', playerId: 'jr-host-' + Math.random().toString(36).slice(2, 8), name: 'Host' });
+        const created = await host.waitFor(d => d.type === 'state');
+        const roomCode = created.room.code;
+
+        const joiner = client();
+        await joiner.ready;
+        const joinerId = 'jr-dup-' + Math.random().toString(36).slice(2, 8);
+        joiner.send({ type: 'join_room', playerId: joinerId, name: 'Joiner', roomCode });
+        const firstJoin = await joiner.waitFor(d => d.type === 'state' && d.players?.length === 2);
+        expect(firstJoin.players.filter(p => p.id === joinerId)).toHaveLength(1);
+
+        // Same tab effectively double-clicking Join - re-sends the exact
+        // same message before ever leaving.
+        joiner.drain();
+        joiner.send({ type: 'join_room', playerId: joinerId, name: 'Joiner', roomCode });
+        const secondJoin = await joiner.waitFor(d => d.type === 'state');
+
+        expect(secondJoin.players).toHaveLength(2); // not 3
+        expect(secondJoin.players.filter(p => p.id === joinerId)).toHaveLength(1);
+
+        host.close();
+        joiner.close();
+    });
+});
+
+describe('starting the game requires every human to be ready', () => {
+    it('rejects start_game while a second human has not readied up, then allows it once they have', async () => {
+        const host = client();
+        await host.ready;
+        const hostId = 'sg-host-' + Math.random().toString(36).slice(2, 8);
+        host.send({ type: 'create_room', playerId: hostId, name: 'Host' });
+        const created = await host.waitFor(d => d.type === 'state');
+        const roomCode = created.room.code;
+        host.send({ type: 'set_ready', ready: true });
+
+        const guest = client();
+        await guest.ready;
+        guest.send({ type: 'join_room', playerId: 'sg-guest-' + Math.random().toString(36).slice(2, 8), name: 'Guest', roomCode });
+        await guest.waitFor(d => d.type === 'state' && d.players?.length === 2);
+        // Guest deliberately does NOT ready up yet.
+
+        host.drain();
+        host.send({ type: 'start_game' });
+        const rejected = await host.waitFor(d => d.type === 'error');
+        expect(rejected.message).toMatch(/all players must be ready/i);
+        expect(roomManager.rooms.get(roomCode).room.status).toBe('lobby');
+
+        guest.send({ type: 'set_ready', ready: true });
+        await host.waitFor(d => d.type === 'state' && d.players?.every(p => p.is_ready));
+
+        host.drain();
+        host.send({ type: 'start_game' });
+        const started = await host.waitFor(d => d.type === 'state' && d.room?.status === 'in_game');
+        expect(started.room.status).toBe('in_game');
+
+        host.close();
+        guest.close();
+    });
+});
+
 describe('hands exhausted without a bust ends the round as a push, not a freeze', () => {
     it('ends the round (new round starts) instead of stalling on an empty-handed turn', async () => {
         const { c, playerId, roomCode, state } = await soloGame();

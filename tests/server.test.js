@@ -222,6 +222,76 @@ describe('leaving mid-game does not freeze the room for everyone else', () => {
     }, 40000);
 });
 
+describe('a brief disconnect mid-turn does not hand the turn to the AI', () => {
+    it('waits out AUTOPILOT_GRACE_MS - a quick reconnect still gets to play the human\'s own card', async () => {
+        const a = client();
+        const b = client();
+        await Promise.all([a.ready, b.ready]);
+
+        const playerAId = 'grace-a-' + Math.random().toString(36).slice(2, 8);
+        const playerBId = 'grace-b-' + Math.random().toString(36).slice(2, 8);
+        a.send({ type: 'create_room', playerId: playerAId, name: 'A' });
+        const created = await a.waitFor(d => d.type === 'state' && d.room?.status === 'lobby');
+        const roomCode = created.room.code;
+        a.send({ type: 'set_ready', ready: true });
+
+        b.send({ type: 'join_room', playerId: playerBId, name: 'B', roomCode });
+        const bJoined = await b.waitFor(d => d.type === 'state' && d.players?.length === 2);
+        const sessionTokenB = bJoined.sessionToken;
+        b.send({ type: 'set_ready', ready: true });
+        a.send({ type: 'start_game' });
+
+        // Get to the playing phase and find whichever of A/B the deal
+        // actually put on turn - bets/positions don't matter here, only
+        // that a human (not a bot) ends up with turn_player_id.
+        const settle = async (c, id) => {
+            for (;;) {
+                const d = await c.waitFor(dd => dd.type === 'state', 15000);
+                if (d.room?.phase === 'playing') return d;
+                if (d.room?.turn_player_id === id && d.room?.phase === 'betting') {
+                    const tableHighest = Math.max(0, ...Object.values(d.roundState?.bets_json || {}));
+                    c.send({ type: 'bet', action: tableHighest === 0 ? 'bet' : 'call', amount: tableHighest === 0 ? 10000 : null });
+                }
+                if (d.roundState?.awaiting_position_choice && d.roundState?.highest_bettor_id === id) {
+                    c.send({ type: 'choose_position', choice: 'last' });
+                }
+            }
+        };
+        const [fromA, fromB] = await Promise.all([settle(a, playerAId), settle(b, playerBId)]);
+        const playing = fromB.room?.phase === 'playing' ? fromB : fromA;
+        const turnPlayerId = playing.room.turn_player_id;
+        const human = turnPlayerId === playerBId ? b : (turnPlayerId === playerAId ? a : null);
+        expect(human).not.toBeNull(); // a bot getting the deal isn't what this test is checking
+
+        const sessionToken = turnPlayerId === playerBId ? sessionTokenB : created.sessionToken;
+        const other = human === b ? a : b;
+
+        other.drain();
+        human.close();
+        await new Promise((resolve) => setTimeout(resolve, 1500)); // well under AUTOPILOT_GRACE_MS
+
+        const reconnected = client();
+        await reconnected.ready;
+        reconnected.send({ type: 'rejoin', playerId: turnPlayerId, roomCode, sessionToken });
+        const afterRejoin = await reconnected.waitFor(d => d.type === 'state');
+
+        // The AI must not have played a card (or bet) on this player's
+        // behalf while they were briefly gone - it's still their turn.
+        expect(afterRejoin.room.turn_player_id).toBe(turnPlayerId);
+        if (afterRejoin.room.phase === 'playing') {
+            expect(afterRejoin.roundState.played_count).toBe(playing.roundState.played_count);
+            const card = Math.min(...afterRejoin.yourHand);
+            reconnected.send({ type: 'play_card', value: card });
+            const afterPlay = await reconnected.waitFor(d => d.type === 'state' && d.roundState?.played_count > afterRejoin.roundState.played_count);
+            expect(afterPlay.roundState.log_json.at(-1).playerId).toBe(turnPlayerId);
+        }
+
+        a.close();
+        b.close();
+        reconnected.close();
+    }, 40000);
+});
+
 describe('duplicate connection for the same player', () => {
     it('closes the older socket with code 4001 instead of leaving it silently orphaned', async () => {
         const first = client();

@@ -481,6 +481,24 @@ function handleStateUpdate(data) {
             } else if (entry.type === 'round_end') {
                 const gain = entry.potDistributions?.[appState.currentUser.playerId];
                 if (gain > 0) myPayoutGain += gain;
+            } else if (
+                (entry.type === 'bet' || entry.type === 'raise' || entry.type === 'call' || entry.type === 'all-in')
+                && entry.playerId === appState.currentUser.playerId
+            ) {
+                // Fires once, tied to the actual bet/call/all-in action
+                // that crossed the threshold - not a persistent status
+                // readout. See the design discussion in the project
+                // history: a standing badge habituated into wallpaper by
+                // round 3 and kept nagging about a decision that was
+                // already locked in during the playing phase, when the
+                // real tension had moved on to the table total. 'call'
+                // doesn't carry its own newTotal (only the call
+                // increment), so read the post-action total straight off
+                // the just-arrived roundState instead.
+                const myBetNow = data.roundState?.bets_json?.[appState.currentUser.playerId] ?? entry.newTotal ?? 0;
+                const myMoneyNow = appState.players.find(p => p.id === appState.currentUser.playerId)?.money_cents ?? 0;
+                const risk = computeStakeRisk(myBetNow, myMoneyNow);
+                if (risk) ui.showStakeRiskToast(risk);
             }
         }
 
@@ -511,13 +529,16 @@ function handleStateUpdate(data) {
 
 /**
  * Flags a bet that's landed at one of the two thresholds that actually
- * read as a distinct moment at the table - "around half your stack" and
- * "everything" - not a running percentage. Deliberately narrow: a 75%
+ * read as a distinct moment at the table: "around half your stack" and
+ * "everything", not a running percentage. Deliberately narrow: a 75%
  * bet is big but isn't flagged, because it isn't the specific "half my
  * life on this" moment this exists to name. Percentage is against the
  * player's stack as it stood at the start of THIS round (bet + what's
  * left), not their all-time high, so it's meaningful every round even
- * as stacks diverge over a match.
+ * as stacks diverge over a match. Short label text, not a sentence -
+ * this fires as a toast (see ui.showStakeRiskToast), not a standing
+ * badge, so it needs to read at a glance like the rest of this game's
+ * chunky, terse UI language.
  * @param {number} betCents - this player's total bet so far this round
  * @param {number} remainingMoneyCents - this player's current money_cents
  * @returns {{level: string, text: string}|null} null when nothing to flag
@@ -526,15 +547,15 @@ function computeStakeRisk(betCents, remainingMoneyCents) {
     if (betCents <= 0) return null;
 
     if (remainingMoneyCents === 0) {
-        return { level: 'all-in', text: "You're ALL IN - everything's riding on this round" };
+        return { level: 'all-in', text: 'ALL IN' };
     }
 
     const roundStartStack = betCents + remainingMoneyCents;
     const pct = betCents / roundStartStack;
     if (pct < 0.4 || pct > 0.6) return null;
-    if (pct < 0.5) return { level: 'near-half', text: "You're playing nearly half your stack" };
-    if (pct > 0.5) return { level: 'over-half', text: "You're playing more than half your stack" };
-    return { level: 'half', text: "You're playing half your stack" };
+    if (pct < 0.5) return { level: 'near-half', text: 'NEARLY HALF YOUR STACK' };
+    if (pct > 0.5) return { level: 'over-half', text: 'OVER HALF YOUR STACK' };
+    return { level: 'half', text: 'HALF YOUR STACK' };
 }
 
 function updateGameUI() {
@@ -579,18 +600,6 @@ function updateGameUI() {
     const underdogInfo = game.computeUnderdogFactor(activePlayersForUnderdog);
     const isUnderdog = !!underdogInfo && underdogInfo.underdogId === myPlayer.id && underdogInfo.factor > 0;
     ui.setUnderdogBadgeVisible(isUnderdog);
-
-    // Names the stakes out loud at the two thresholds that actually feel
-    // different at the table: "around half my stack" and "everything",
-    // rather than a running percentage nobody asked for. Only meaningful
-    // while the round is still live (betting/playing) - once it ends,
-    // endRound() has already paid money_cents out while bets_json still
-    // holds the now-finished round's bet, so the same math would compare
-    // a stale bet against a bankroll that already includes the payout,
-    // reading as "you're risking half your stack" right after a win.
-    const isRoundLive = appState.room.phase === 'betting' || appState.room.phase === 'playing';
-    const myBetThisRound = appState.roundState?.bets_json?.[myPlayer.id] || 0;
-    ui.setStakeRiskBadge(isRoundLive ? computeStakeRisk(myBetThisRound, myPlayer.money_cents) : null);
 
     const isMyTurn = appState.room.turn_player_id === appState.currentUser.playerId;
     const isSpectator = myPlayer.status === 'spectator';

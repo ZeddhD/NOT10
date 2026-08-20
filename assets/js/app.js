@@ -547,7 +547,11 @@ function computeStakeRisk(betCents, remainingMoneyCents) {
     if (betCents <= 0) return null;
 
     if (remainingMoneyCents === 0) {
-        return { level: 'all-in', text: 'ALL IN' };
+        // "ALL IN" would just repeat the button the player clicked a
+        // moment earlier - keeps the same "__ YOUR STACK" family as the
+        // other three tiers instead, so this reads as the top of a
+        // graduated ladder, not an unrelated fourth line.
+        return { level: 'all-in', text: 'YOUR WHOLE STACK' };
     }
 
     const roundStartStack = betCents + remainingMoneyCents;

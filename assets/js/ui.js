@@ -1004,7 +1004,7 @@ export function showMoneyGain(gainCents, newTotalCents) {
     if (reduceMotion) {
         valueEl.textContent = utils.formatMoney(newTotalCents);
     } else {
-        const duration = 700;
+        const duration = 900;
         const startTime = performance.now();
         const tick = (now) => {
             const t = Math.min(1, (now - startTime) / duration);

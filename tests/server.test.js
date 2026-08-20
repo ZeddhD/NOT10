@@ -241,30 +241,59 @@ describe('a brief disconnect mid-turn does not hand the turn to the AI', () => {
         b.send({ type: 'set_ready', ready: true });
         a.send({ type: 'start_game' });
 
-        // Get to the playing phase and find whichever of A/B the deal
-        // actually put on turn - bets/positions don't matter here, only
-        // that a human (not a bot) ends up with turn_player_id.
-        const settle = async (c, id) => {
+        await b.waitFor(d => d.type === 'state' && d.room?.status === 'in_game');
+        // Force B to deterministically win the position choice and go
+        // FIRST - same technique as the GO FIRST/LAST test - so B is
+        // guaranteed to hold turn_player_id once play_order[0] fires,
+        // instead of leaving it to chance which of A/B/the 2 bots the deal
+        // happens to put first.
+        const room = roomManager.rooms.get(roomCode);
+        room.players.find(p => p.id === playerBId).money_cents = 200000;
+
+        // A and any bots just need to stay out of the way (call/bet
+        // minimally whenever it's their turn) while B goes ALL-IN.
+        const keepMoving = async (c, id) => {
             for (;;) {
-                const d = await c.waitFor(dd => dd.type === 'state', 15000);
-                if (d.room?.phase === 'playing') return d;
+                const d = await c.waitFor(dd => dd.type === 'state', 25000);
+                if (d.room?.phase === 'playing' && !d.roundState?.awaiting_position_choice) return d;
                 if (d.room?.turn_player_id === id && d.room?.phase === 'betting') {
                     const tableHighest = Math.max(0, ...Object.values(d.roundState?.bets_json || {}));
-                    c.send({ type: 'bet', action: tableHighest === 0 ? 'bet' : 'call', amount: tableHighest === 0 ? 10000 : null });
-                }
-                if (d.roundState?.awaiting_position_choice && d.roundState?.highest_bettor_id === id) {
-                    c.send({ type: 'choose_position', choice: 'last' });
+                    const myBet = d.roundState?.bets_json?.[id] || 0;
+                    const myMoney = d.players?.find(p => p.id === id)?.money_cents ?? 0;
+                    // B's forced-huge all-in can put the call amount well
+                    // past what A's default starting stack can cover -
+                    // go all-in instead of a 'call' that would just be
+                    // rejected for insufficient funds and stall the loop.
+                    if (tableHighest === 0) {
+                        c.send({ type: 'bet', action: 'bet', amount: 10000 });
+                    } else if (myMoney < tableHighest - myBet) {
+                        c.send({ type: 'bet', action: 'all-in', amount: null });
+                    } else {
+                        c.send({ type: 'bet', action: 'call', amount: null });
+                    }
                 }
             }
         };
-        const [fromA, fromB] = await Promise.all([settle(a, playerAId), settle(b, playerBId)]);
-        const playing = fromB.room?.phase === 'playing' ? fromB : fromA;
-        const turnPlayerId = playing.room.turn_player_id;
-        const human = turnPlayerId === playerBId ? b : (turnPlayerId === playerAId ? a : null);
-        expect(human).not.toBeNull(); // a bot getting the deal isn't what this test is checking
+        const winPosition = async (c, id) => {
+            for (;;) {
+                const d = await c.waitFor(dd => dd.type === 'state', 25000);
+                if (d.room?.phase === 'playing' && !d.roundState?.awaiting_position_choice) return d;
+                if (d.room?.turn_player_id === id && d.room?.phase === 'betting') {
+                    c.send({ type: 'bet', action: 'all-in', amount: null });
+                }
+                if (d.roundState?.awaiting_position_choice && d.roundState?.highest_bettor_id === id) {
+                    c.send({ type: 'choose_position', choice: 'first' });
+                }
+            }
+        };
+        const [, fromB] = await Promise.all([keepMoving(a, playerAId), winPosition(b, playerBId)]);
+        const playing = fromB;
+        expect(playing.room.turn_player_id).toBe(playerBId); // B chose FIRST and must be play_order[0]
 
-        const sessionToken = turnPlayerId === playerBId ? sessionTokenB : created.sessionToken;
-        const other = human === b ? a : b;
+        const turnPlayerId = playerBId;
+        const human = b;
+        const sessionToken = sessionTokenB;
+        const other = a;
 
         other.drain();
         human.close();

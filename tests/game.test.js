@@ -320,6 +320,20 @@ describe('game.processCardPlay', () => {
         expect(result.bust).toBe(true);
         expect(result.total).toBe(11);
     });
+
+    it('rejects a play while a position choice is still pending, even if turn_player_id points at that player', () => {
+        // transitionToPlaying sets a provisional turn_player_id (play_order[0]
+        // under the pre-choice seat order) the moment betting closes, before
+        // the highest bettor has actually chosen FIRST/LAST - that provisional
+        // player isn't necessarily the bettor, and nobody's hand is fully
+        // dealt yet. A play must not go through until the choice resolves.
+        roundState.awaiting_position_choice = true;
+        roundState.highest_bettor_id = 'p2';
+        const result = game.processCardPlay(room, players, roundState, 'p1', 3);
+        expect(result.success).toBe(false);
+        expect(result.error).toMatch(/position choice/i);
+        expect(room.table_total).toBe(0);
+    });
 });
 
 describe('game.endRound - weighted pot distribution', () => {

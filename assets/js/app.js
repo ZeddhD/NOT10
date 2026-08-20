@@ -622,6 +622,21 @@ function updateGameUI() {
             ui.setHandNote(remaining > 0
                 ? `${remaining} more card${remaining === 1 ? '' : 's'} after the position choice`
                 : null);
+        } else if (appState.roundState?.awaiting_position_choice) {
+            // Someone else (bot or human) is still deciding FIRST/LAST -
+            // room.turn_player_id already points at whoever play_order[0]
+            // will be, which can be a player other than the bettor, but
+            // nobody's hand is fully dealt and no one may act until the
+            // choice resolves. Previously this fell into the "else" branch
+            // below and rendered as a normal playable turn for whoever
+            // turn_player_id happened to be - letting a card get played
+            // before the position choice (and the rest of the deal) ever
+            // happened. The server rejects it too now (see
+            // processCardPlay), but the hand shouldn't even look clickable.
+            const bettor = appState.players.find(p => p.id === appState.roundState.highest_bettor_id);
+            ui.hideAllControls();
+            ui.renderHand(appState.myHand, false, null);
+            ui.setHandNote(bettor ? `Waiting for ${bettor.name} to choose FIRST or LAST...` : null);
         } else {
             ui.hideAllControls();
             ui.showPlayingControls(true);

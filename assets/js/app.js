@@ -528,17 +528,21 @@ function handleStateUpdate(data) {
 // ==========================================
 
 /**
- * Flags a bet that's landed at one of the two thresholds that actually
- * read as a distinct moment at the table: "around half your stack" and
- * "everything", not a running percentage. Deliberately narrow: a 75%
- * bet is big but isn't flagged, because it isn't the specific "half my
- * life on this" moment this exists to name. Percentage is against the
- * player's stack as it stood at the start of THIS round (bet + what's
- * left), not their all-time high, so it's meaningful every round even
- * as stacks diverge over a match. Short label text, not a sentence -
- * this fires as a toast (see ui.showStakeRiskToast), not a standing
- * badge, so it needs to read at a glance like the rest of this game's
- * chunky, terse UI language.
+ * Flags a bet that's landed at a fraction of the player's stack big
+ * enough to actually feel like something, not a running percentage.
+ * Three coarse states, matching the only thing this game's own rules
+ * actually distinguish (money left vs. all-in) plus one psychologically
+ * real anchor ("half" is a cognitively privileged fraction people react
+ * to faster than an arbitrary one like 43%) - not three near-identical
+ * shades of "kind of a lot" that a player has to tell apart in the ~2s
+ * this toast is on screen. Below 40% isn't flagged at all: a moderate
+ * bet isn't the specific "a lot of my stack" moment this exists to name.
+ * Percentage is against the player's stack as it stood at the start of
+ * THIS round (bet + what's left), not their all-time high, so it's
+ * meaningful every round even as stacks diverge over a match. Short
+ * label text, not a sentence - this fires as a toast (see
+ * ui.showStakeRiskToast), not a standing badge, so it needs to read at a
+ * glance like the rest of this game's chunky, terse UI language.
  * @param {number} betCents - this player's total bet so far this round
  * @param {number} remainingMoneyCents - this player's current money_cents
  * @returns {{level: string, text: string}|null} null when nothing to flag
@@ -547,19 +551,14 @@ function computeStakeRisk(betCents, remainingMoneyCents) {
     if (betCents <= 0) return null;
 
     if (remainingMoneyCents === 0) {
-        // "ALL IN" would just repeat the button the player clicked a
-        // moment earlier - keeps the same "__ YOUR STACK" family as the
-        // other three tiers instead, so this reads as the top of a
-        // graduated ladder, not an unrelated fourth line.
         return { level: 'all-in', text: 'YOUR WHOLE STACK' };
     }
 
     const roundStartStack = betCents + remainingMoneyCents;
     const pct = betCents / roundStartStack;
-    if (pct < 0.4 || pct > 0.6) return null;
-    if (pct < 0.5) return { level: 'near-half', text: 'NEARLY HALF YOUR STACK' };
-    if (pct > 0.5) return { level: 'over-half', text: 'OVER HALF YOUR STACK' };
-    return { level: 'half', text: 'HALF YOUR STACK' };
+    if (pct < 0.4) return null;
+    if (pct <= 0.6) return { level: 'half', text: 'AROUND HALF YOUR STACK' };
+    return { level: 'most', text: 'MOST OF YOUR STACK' };
 }
 
 function updateGameUI() {

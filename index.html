@@ -278,6 +278,15 @@
                     <div id="underdog-badge" class="underdog-badge hidden">
                         Comeback bonus active - your bet counts extra
                     </div>
+                    <!-- Names the stakes out loud instead of leaving the
+                         asymmetry silent (see app.js's computeStakeRisk) -
+                         only for "around half" and "everything", the two
+                         psychologically real thresholds, not a running
+                         percentage readout. Set once per round and left
+                         alone; money_cents doesn't change again until the
+                         round ends, so it stays accurate through betting
+                         and playing both. -->
+                    <div id="stake-risk-badge" class="stake-risk-badge hidden"></div>
 
                     <div class="controls-and-cards">
                         <!-- Your hand comes first - it's what you're acting on -->

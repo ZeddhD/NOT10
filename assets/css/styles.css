@@ -1425,6 +1425,37 @@ h1, h2, h3, h4, h5, h6 {
     display: none;
 }
 
+/* Names the stakes out loud when a bet lands near/at a psychologically
+   real fraction of the player's round-start stack (see
+   app.js::computeStakeRisk). --color-warning, not --color-stakes - this
+   is a caution state ("pay attention"), not a neutral money readout, and
+   the palette rules at the top of this file keep those two meanings
+   deliberately separate. */
+.stake-risk-badge {
+    background: var(--color-bg-tertiary);
+    border: var(--border-thick) solid var(--color-warning);
+    color: var(--color-warning);
+    border-radius: var(--radius-md);
+    padding: var(--spacing-sm) var(--spacing-md);
+    margin-bottom: var(--spacing-lg);
+    font-size: 0.8rem;
+    font-weight: 800;
+    text-align: center;
+    box-shadow: var(--shadow-sm);
+}
+
+/* ALL IN escalates to --color-danger, matching .btn-all-in - this is the
+   same "your whole game is riding on this" state that button already
+   marks, not a new meaning invented for this badge. */
+.stake-risk-badge.all-in {
+    border-color: var(--color-danger);
+    color: var(--color-danger);
+}
+
+.stake-risk-badge.hidden {
+    display: none;
+}
+
 .stat-chip {
     position: relative;
     flex: 1 1 180px;

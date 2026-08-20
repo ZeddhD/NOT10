@@ -539,22 +539,22 @@ export function setUnderdogBadgeVisible(visible) {
 }
 
 /**
- * Show/hide/update the stake-risk badge (see app.js::computeStakeRisk for
- * the thresholds). Pass null to hide it.
- * @param {{level: string, text: string}|null} risk
+ * Flash a short label off the "Your Money" chip at the instant a bet/call/
+ * all-in action crosses "around half your stack" or ALL IN (see
+ * app.js::computeStakeRisk) - a one-time moment, not a standing status
+ * readout, so it's built exactly like showMoneyGain's toast rather than
+ * a persistent badge.
+ * @param {{level: string, text: string}} risk
  */
-export function setStakeRiskBadge(risk) {
-    const el = document.getElementById('stake-risk-badge');
-    if (!el) return;
-    if (!risk) {
-        el.classList.add('hidden');
-        el.classList.remove('all-in');
-        el.textContent = '';
-        return;
-    }
-    el.textContent = risk.text;
-    el.classList.toggle('all-in', risk.level === 'all-in');
-    el.classList.remove('hidden');
+export function showStakeRiskToast(risk) {
+    const chipEl = document.getElementById('your-money-amount')?.closest('.stat-chip');
+    if (!chipEl) return;
+
+    const toast = document.createElement('span');
+    toast.className = `stake-risk-toast${risk.level === 'all-in' ? ' all-in' : ''}`;
+    toast.textContent = risk.text;
+    toast.addEventListener('animationend', () => toast.remove());
+    chipEl.appendChild(toast);
 }
 
 /**

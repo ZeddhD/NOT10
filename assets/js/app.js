@@ -509,6 +509,34 @@ function handleStateUpdate(data) {
 // UI UPDATES
 // ==========================================
 
+/**
+ * Flags a bet that's landed at one of the two thresholds that actually
+ * read as a distinct moment at the table - "around half your stack" and
+ * "everything" - not a running percentage. Deliberately narrow: a 75%
+ * bet is big but isn't flagged, because it isn't the specific "half my
+ * life on this" moment this exists to name. Percentage is against the
+ * player's stack as it stood at the start of THIS round (bet + what's
+ * left), not their all-time high, so it's meaningful every round even
+ * as stacks diverge over a match.
+ * @param {number} betCents - this player's total bet so far this round
+ * @param {number} remainingMoneyCents - this player's current money_cents
+ * @returns {{level: string, text: string}|null} null when nothing to flag
+ */
+function computeStakeRisk(betCents, remainingMoneyCents) {
+    if (betCents <= 0) return null;
+
+    if (remainingMoneyCents === 0) {
+        return { level: 'all-in', text: "You're ALL IN - everything's riding on this round" };
+    }
+
+    const roundStartStack = betCents + remainingMoneyCents;
+    const pct = betCents / roundStartStack;
+    if (pct < 0.4 || pct > 0.6) return null;
+    if (pct < 0.5) return { level: 'near-half', text: "You're playing nearly half your stack" };
+    if (pct > 0.5) return { level: 'over-half', text: "You're playing more than half your stack" };
+    return { level: 'half', text: "You're playing half your stack" };
+}
+
 function updateGameUI() {
     if (!appState.room || !appState.players.length) return;
     
@@ -551,6 +579,14 @@ function updateGameUI() {
     const underdogInfo = game.computeUnderdogFactor(activePlayersForUnderdog);
     const isUnderdog = !!underdogInfo && underdogInfo.underdogId === myPlayer.id && underdogInfo.factor > 0;
     ui.setUnderdogBadgeVisible(isUnderdog);
+
+    // Names the stakes out loud at the two thresholds that actually feel
+    // different at the table - "around half my stack" and "everything" -
+    // rather than a running percentage nobody asked for. bets_json/
+    // money_cents don't change again until round end, so this stays
+    // correct for the whole rest of the round on its own.
+    const myBetThisRound = appState.roundState?.bets_json?.[myPlayer.id] || 0;
+    ui.setStakeRiskBadge(computeStakeRisk(myBetThisRound, myPlayer.money_cents));
 
     const isMyTurn = appState.room.turn_player_id === appState.currentUser.playerId;
     const isSpectator = myPlayer.status === 'spectator';

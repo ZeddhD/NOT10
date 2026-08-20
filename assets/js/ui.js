@@ -539,6 +539,25 @@ export function setUnderdogBadgeVisible(visible) {
 }
 
 /**
+ * Show/hide/update the stake-risk badge (see app.js::computeStakeRisk for
+ * the thresholds). Pass null to hide it.
+ * @param {{level: string, text: string}|null} risk
+ */
+export function setStakeRiskBadge(risk) {
+    const el = document.getElementById('stake-risk-badge');
+    if (!el) return;
+    if (!risk) {
+        el.classList.add('hidden');
+        el.classList.remove('all-in');
+        el.textContent = '';
+        return;
+    }
+    el.textContent = risk.text;
+    el.classList.toggle('all-in', risk.level === 'all-in');
+    el.classList.remove('hidden');
+}
+
+/**
  * Render the live standings shown to a spectator in place of their own
  * (no longer relevant) money/payout figures - who's still in, sorted by
  * current stack, so there's something worth watching instead of blanks.

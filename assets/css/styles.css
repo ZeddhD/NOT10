@@ -1467,13 +1467,16 @@ h1, h2, h3, h4, h5, h6 {
     box-shadow: var(--shadow-sm);
     pointer-events: none;
     z-index: 5;
-    animation: money-gain-toast 1.1s ease-out forwards;
+    animation: money-gain-toast 1.9s ease-out forwards;
 }
 
 @keyframes money-gain-toast {
     0% { transform: translateY(4px) scale(0.85); opacity: 0; }
-    15% { transform: translateY(-2px) scale(1.05); opacity: 1; }
-    30% { transform: translateY(-4px) scale(1); opacity: 1; }
+    10% { transform: translateY(-2px) scale(1.05); opacity: 1; }
+    20% { transform: translateY(-4px) scale(1); opacity: 1; }
+    /* Holds here, fully visible and still, for close to a full second -
+       long enough to actually read the number before it starts leaving. */
+    65% { transform: translateY(-4px) scale(1); opacity: 1; }
     100% { transform: translateY(-1.6rem) scale(1); opacity: 0; }
 }
 

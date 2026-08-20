@@ -568,6 +568,18 @@ export function processCardPlay(room, players, roundState, playerId, cardValue) 
     if (!player || player.status !== 'active') {
         return { success: false, error: 'Player not active' };
     }
+    // transitionToPlaying sets room.phase = 'playing' and a provisional
+    // turn_player_id (play_order[0] under the CURRENT seat order) the
+    // moment betting closes, even when a position choice is still pending -
+    // it has to, so the client can render the "waiting on FIRST/LAST" state
+    // before the choice is made. But that provisional turn_player_id can
+    // land on someone other than the highest bettor, whose hand isn't even
+    // fully dealt yet (see dealRemainingHands). Without this check, that
+    // player could play a card before the choice - and the resulting real
+    // play order - ever existed.
+    if (roundState.awaiting_position_choice) {
+        return { success: false, error: 'Waiting on the position choice' };
+    }
     if (room.turn_player_id !== playerId) {
         return { success: false, error: 'Not your turn' };
     }

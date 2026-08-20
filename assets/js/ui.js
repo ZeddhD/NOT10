@@ -984,6 +984,55 @@ export function updateYourMoney(moneyCents) {
 }
 
 /**
+ * Celebrate a round payout landing in the player's own bankroll: a
+ * floating "+$XXX" toast off the money chip, a digit count-up from the
+ * pre-payout total to the new one, and a small pulse on the chip itself.
+ * Called once per round, only for the player who actually won a share
+ * (see app.js's round_end log handling) - never for a bet/raise deducting
+ * money, which stays a plain snap via updateYourMoney.
+ * @param {number} gainCents - the amount just won this round
+ * @param {number} newTotalCents - the player's bankroll after the payout
+ */
+export function showMoneyGain(gainCents, newTotalCents) {
+    const valueEl = document.getElementById('your-money-amount');
+    const chipEl = valueEl?.closest('.stat-chip');
+    if (!valueEl || !chipEl) return;
+
+    const startCents = Math.max(0, newTotalCents - gainCents);
+    const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+
+    if (reduceMotion) {
+        valueEl.textContent = utils.formatMoney(newTotalCents);
+    } else {
+        const duration = 700;
+        const startTime = performance.now();
+        const tick = (now) => {
+            const t = Math.min(1, (now - startTime) / duration);
+            const eased = 1 - Math.pow(1 - t, 3); // ease-out cubic - lands on the exact total, not just close
+            valueEl.textContent = utils.formatMoney(Math.round(startCents + (newTotalCents - startCents) * eased));
+            if (t < 1) requestAnimationFrame(tick);
+        };
+        requestAnimationFrame(tick);
+    }
+
+    const toast = document.createElement('span');
+    toast.className = 'money-gain-toast';
+    toast.textContent = `+${utils.formatMoney(gainCents)}`;
+    toast.addEventListener('animationend', () => toast.remove());
+    chipEl.appendChild(toast);
+
+    chipEl.classList.remove('money-gain-pulse');
+    void chipEl.offsetWidth; // restart the keyframe if it's still mid-run from a fast prior round
+    chipEl.classList.add('money-gain-pulse');
+    chipEl.addEventListener('animationend', function onPulseEnd(e) {
+        if (e.animationName === 'money-gain-pulse') {
+            chipEl.classList.remove('money-gain-pulse');
+            chipEl.removeEventListener('animationend', onPulseEnd);
+        }
+    });
+}
+
+/**
  * Update the always-visible "Best Potential Payout" stat chip.
  * @param {number|null} amountCents - Best-case payout in cents, or null when
  *                                    not in a phase where this is knowable

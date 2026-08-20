@@ -173,6 +173,19 @@ export function playWin() {
     vibrate([20, 20, 20, 20, 60]);
 }
 
+// A round's pot lands in YOUR bankroll (see ui.showMoneyGain) - a quick,
+// bright "cha-ching" pluck. Deliberately smaller/shorter than playWin(),
+// which stays reserved for winning the whole game - this fires every
+// round you take a share of the pot, so it has to be light enough not to
+// wear out over a long match.
+export function playMoneyGain() {
+    tones([
+        { freq: 660, duration: 0.06, type: 'triangle', gain: 0.11 },
+        { freq: 990, duration: 0.12, type: 'triangle', gain: 0.13, delay: 0.05 }
+    ]);
+    vibrate([12]);
+}
+
 // The game ended and it wasn't you - a plain, neutral descending tone.
 // Not harsh like a bust, not triumphant like playWin(), just enough that
 // the end-of-game moment isn't silent for everyone except the winner.

@@ -32,7 +32,12 @@ const appState = {
     // with bots, minus the lobby screen. Persists across "Play Again" so
     // a rematch also auto-starts; cleared on Leave.
     autoStartSolo: false,
-    autoStartSent: false
+    autoStartSent: false,
+    // Highest stake-risk tier already toasted this round (see
+    // computeStakeRisk/showStakeRiskToast) - reset every new round so the
+    // cue can fire again next round, but never twice for the same tier
+    // in one round even across several raise/call actions.
+    stakeRiskShownLevel: null
 };
 
 // Initialize app
@@ -449,6 +454,7 @@ function handleStateUpdate(data) {
         if (isNewRound) {
             ui.initGameScreen();
             ui.clearPlayedCards();
+            appState.stakeRiskShownLevel = null;
         }
 
         // A round_end entry carries the exact payout split
@@ -498,7 +504,16 @@ function handleStateUpdate(data) {
                 const myBetNow = data.roundState?.bets_json?.[appState.currentUser.playerId] ?? entry.newTotal ?? 0;
                 const myMoneyNow = appState.players.find(p => p.id === appState.currentUser.playerId)?.money_cents ?? 0;
                 const risk = computeStakeRisk(myBetNow, myMoneyNow);
-                if (risk) ui.showStakeRiskToast(risk);
+                // Once per tier per round - a second raise that lands in
+                // the SAME tier (e.g. 45% then re-raised to 55%, both
+                // "around half") shouldn't re-announce something already
+                // said. A raise that crosses into a genuinely new tier
+                // (half -> most -> all-in) still fires, since that's a
+                // real escalation, not a repeat.
+                if (risk && risk.level !== appState.stakeRiskShownLevel) {
+                    ui.showStakeRiskToast(risk);
+                    appState.stakeRiskShownLevel = risk.level;
+                }
             }
         }
 

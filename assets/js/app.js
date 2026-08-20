@@ -451,6 +451,14 @@ function handleStateUpdate(data) {
             ui.clearPlayedCards();
         }
 
+        // A round_end entry carries the exact payout split
+        // (potDistributions) - collected here rather than read off a
+        // money_cents diff so a refund/edge case elsewhere can never be
+        // mistaken for a win. Applied after updateGameUI() below, once
+        // the DOM already shows the final total, so showMoneyGain has a
+        // real "before" value to animate up from.
+        let myPayoutGain = 0;
+
         const newEntries = (data.roundState?.log_json || []).slice(isNewRound ? 0 : previousLogLength);
         for (const entry of newEntries) {
             const isDanger = entry.type === 'play_card' && entry.newTotal >= game.GAME_CONSTANTS.BUST_THRESHOLD;
@@ -470,10 +478,20 @@ function handleStateUpdate(data) {
                 // Rare, table-wide dramatic moments - previously only
                 // visible as a log line, now with a sting everyone hears.
                 sound.playSpecialMoment();
+            } else if (entry.type === 'round_end') {
+                const gain = entry.potDistributions?.[appState.currentUser.playerId];
+                if (gain > 0) myPayoutGain += gain;
             }
         }
 
         updateGameUI();
+
+        if (myPayoutGain > 0) {
+            const myPlayer = appState.players.find(p => p.id === appState.currentUser.playerId);
+            if (myPlayer) ui.showMoneyGain(myPayoutGain, myPlayer.money_cents);
+            sound.playMoneyGain();
+        }
+
         return;
     }
 

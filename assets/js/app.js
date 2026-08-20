@@ -581,12 +581,16 @@ function updateGameUI() {
     ui.setUnderdogBadgeVisible(isUnderdog);
 
     // Names the stakes out loud at the two thresholds that actually feel
-    // different at the table - "around half my stack" and "everything" -
-    // rather than a running percentage nobody asked for. bets_json/
-    // money_cents don't change again until round end, so this stays
-    // correct for the whole rest of the round on its own.
+    // different at the table: "around half my stack" and "everything",
+    // rather than a running percentage nobody asked for. Only meaningful
+    // while the round is still live (betting/playing) - once it ends,
+    // endRound() has already paid money_cents out while bets_json still
+    // holds the now-finished round's bet, so the same math would compare
+    // a stale bet against a bankroll that already includes the payout,
+    // reading as "you're risking half your stack" right after a win.
+    const isRoundLive = appState.room.phase === 'betting' || appState.room.phase === 'playing';
     const myBetThisRound = appState.roundState?.bets_json?.[myPlayer.id] || 0;
-    ui.setStakeRiskBadge(computeStakeRisk(myBetThisRound, myPlayer.money_cents));
+    ui.setStakeRiskBadge(isRoundLive ? computeStakeRisk(myBetThisRound, myPlayer.money_cents) : null);
 
     const isMyTurn = appState.room.turn_player_id === appState.currentUser.playerId;
     const isSpectator = myPlayer.status === 'spectator';

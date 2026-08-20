@@ -1505,6 +1505,26 @@ h1, h2, h3, h4, h5, h6 {
     color: var(--color-stakes);
 }
 
+/* "Best Potential Payout" before the playing phase has a real number to
+   show (see ui.updateYourPotential) - genuinely unknowable at that point,
+   not zero, so this isn't a fallback for missing data, it's the correct
+   value. A plain "-" read as broken/unloaded next to the lit-up stakes
+   number it sits beside, especially once that neighbor started animating
+   (see showMoneyGain). "?" at the same weight/size keeps the two chips
+   reading as one system, dimmed instead of lit to mark it locked rather
+   than absent, and a slow breathe says "waiting on something," not
+   "nothing here" - matching the actual reason it's blank: the game hasn't
+   dealt you that information yet on purpose. */
+.stat-chip-value.stakes.unknown {
+    color: var(--color-text-dim);
+    animation: potential-unknown-breathe 2.4s ease-in-out infinite;
+}
+
+@keyframes potential-unknown-breathe {
+    0%, 100% { opacity: 0.55; }
+    50% { opacity: 1; }
+}
+
 /* Stacked vertically - the sidebar is a narrow column, not a wide strip,
    so hand cards and betting controls sit one above the other instead of
    fighting for horizontal space. */

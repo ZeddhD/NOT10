@@ -1040,9 +1040,12 @@ export function showMoneyGain(gainCents, newTotalCents) {
 export function updateYourPotential(amountCents) {
     const el = document.getElementById('your-potential-amount');
     if (!el) return;
-    el.textContent = (amountCents === null || amountCents === undefined)
-        ? '—'
-        : utils.formatMoney(amountCents);
+    const isUnknown = amountCents === null || amountCents === undefined;
+    // Before the playing phase there's no real number to show - not
+    // missing data, genuinely unknowable yet (see the .unknown rule in
+    // styles.css for why this is "?" and not a plain dash).
+    el.classList.toggle('unknown', isUnknown);
+    el.textContent = isUnknown ? '?' : utils.formatMoney(amountCents);
 }
 
 /**

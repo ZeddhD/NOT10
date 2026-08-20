@@ -669,4 +669,7 @@ Created as a demonstration of:
 
 **Enjoy playing NOT10! 🎮**
 
-For deployment instructions, see [DEPLOYMENT.md](DEPLOYMENT.md)
+For deployment instructions, see [DEPLOYMENT.md](DEPLOYMENT.md). For the
+architecture rationale, real concurrency bugs found and fixed, security
+model, and an honest account of what's untested, see
+[DESIGN.md](DESIGN.md).
